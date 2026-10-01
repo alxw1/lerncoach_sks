@@ -45,25 +45,36 @@ Der Lernstand liegt im Browser (localStorage) und bleibt über alle Sitzungen er
   formuliert eine kurze, vorlesbare Rückmeldung samt Eselsbrücke. Schlägt der Aufruf fehl (z. B. Funkloch), greift automatisch der Stichwortabgleich.
   Der Schlüssel wird nur lokal im Browser gespeichert und direkt an die Anthropic API gesendet.
 
-Zusätzlich gibt es kuratierte Eselsbrücken (`src/hints.js`, z. B. Kardinalzeichen, Kursumwandlung, Ausweichregeln, Lichterführung).
-Sie sind **Lernhilfen** – maßgeblich ist immer die ELWIS-Antwort.
+Zusätzlich gibt es kuratierte Eselsbrücken (`src/hints.js`), fest zugeordnet zu 46 Katalogfragen – z. B. Nordrichtungen und
+Fehlweisung, Spring-/Nippzeit, manövrierunfähig vs. manövrierbehindert, Ausweichregeln, Mensch über Bord.
+Sie sind **Lernhilfen**, abgestimmt auf die Musterantworten – maßgeblich ist immer die ELWIS-Antwort.
 
 ## Fragenkatalog
 
-Die Fragen stammen ausschließlich aus dem amtlichen Katalog:
-<https://www.elwis.de/DE/Sportschifffahrt/Sportbootfuehrerscheine/Fragenkatalog-SKS/Fragenkatalog-SKS-node.html>
+`data/fragen.json` enthält alle **638 Fragen** des amtlichen Katalogs (Stand 01.07.2006), erzeugt aus dem ELWIS-PDF
+`Fragenkatalog-SKS.pdf`:
 
-`data/fragen.json` wird mit dem Importer erzeugt (nicht von Hand):
+| Gebiet | Fragen | davon mit Abbildung |
+|--------|-------:|--------------------:|
+| Navigation | 118 | 0 |
+| Schifffahrtsrecht | 110 | 9 |
+| Wetterkunde | 101 | 2 |
+| Seemannschaft I (Antriebsmaschine und unter Segel) | 163 | 4 |
+| Seemannschaft II (Antriebsmaschine) | 146 | 2 |
+
+Abbildungen und Lösungsskizzen liegen in `data/img/`. Fragen mit Abbildung werden im Autofahrt-Modus standardmäßig ausgelassen
+und nur am Bildschirm gestellt.
+
+Neuen Katalog einlesen (z. B. wenn ELWIS eine neue Fassung veröffentlicht):
 
 ```bash
-npm install
-npm run import:elwis                    # lädt die Seiten direkt von elwis.de
-npm run import:elwis -- --save-html elwis-html   # zusätzlich die Roh-HTML sichern
-npm run import:elwis -- --from-dir elwis-html    # aus gespeicherten Seiten erzeugen
+pip install pymupdf
+python3 scripts/import-pdf.py Fragenkatalog-SKS.pdf    # aus dem PDF (empfohlen)
+npm install && npm run import:elwis                    # alternativ aus den ELWIS-Webseiten
 ```
 
-Alternativ direkt in der App: *Einstellungen → Fragenkatalog → Importieren* und die im Browser gespeicherten ELWIS-Seiten (`.html`)
-oder eine `fragen.json` auswählen. Fragen mit Abbildungen werden im Auto-Modus standardmäßig ausgelassen.
+Der PDF-Importer trennt Frage und Antwort über die Schrift (Fragen fett), prüft die Vollständigkeit je Gebiet und exportiert die Abbildungen.
+In der App lässt sich unter *Einstellungen → Fragenkatalog* außerdem eine `fragen.json` oder gespeicherte ELWIS-HTML-Seiten importieren.
 
 ## Starten
 
@@ -96,6 +107,7 @@ src/grader.js               Stichwortabgleich + optionale Claude-Bewertung
 src/hints.js                kuratierte Eselsbrücken
 src/speech.js               Sprachausgabe/-erkennung, Sprachbefehle
 src/elwis-parser.js         ELWIS-HTML → Fragen (Browser und Node)
-scripts/import-elwis.mjs    erzeugt data/fragen.json
+scripts/import-pdf.py       erzeugt data/fragen.json aus dem ELWIS-PDF
+scripts/import-elwis.mjs    alternativ aus den ELWIS-Webseiten
 COACH_PROMPT.md             Systemprompt, um den Coach auch im Claude-Sprachmodus zu nutzen
 ```

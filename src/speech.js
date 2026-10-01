@@ -32,6 +32,7 @@ function chunks(text) {
   const parts = text
     .replace(/^\s*–\s*/gm, '')
     .replace(/\s+–\s+/g, ', ')
+    .replace(/([.!?:;,])\s*\n+/g, '$1 ')
     .replace(/\n+/g, '. ')
     .split(/(?<=[.!?;:])\s+/)
     .map((s) => s.trim())
@@ -68,24 +69,61 @@ export function stopSpeaking() {
   synth?.cancel();
 }
 
+const ABBREVIATIONS = [
+  [/\bz\.\s?B\./g, 'zum Beispiel'],
+  [/\bu\.\s?a\./gi, 'unter anderem'],
+  [/\bu\.\s?Ä\./g, 'und Ähnliches'],
+  [/\bu\.\s?U\./g, 'unter Umständen'],
+  [/\bi\.\s?W\./g, 'im Wesentlichen'],
+  [/\bz\.\s?T\./g, 'zum Teil'],
+  [/\bd\.\s?h\./g, 'das heißt'],
+  [/\bbzw\./g, 'beziehungsweise'],
+  [/\bggf\./gi, 'gegebenenfalls'],
+  [/\bca\./g, 'circa'],
+  [/\bNr\.\s?/g, 'Nummer '],
+  [/\bFdW\b/g, 'Fahrt durchs Wasser'],
+  [/\bFüG\b/g, 'Fahrt über Grund'],
+  [/\bKüG\b/g, 'Kurs über Grund'],
+  [/\brwK\b/g, 'rechtweisender Kurs'],
+  [/\bmwK\b/g, 'missweisender Kurs'],
+  [/\bMgK\b/g, 'Magnetkompasskurs'],
+  [/\brwP\b/g, 'rechtweisende Peilung'],
+  [/\bMgP\b/g, 'Magnetkompasspeilung'],
+  [/\brwN\b/g, 'rechtweisend Nord'],
+  [/\bmwN\b/g, 'missweisend Nord'],
+  [/\bMgN\b/g, 'Magnetkompass-Nord'],
+  [/\bAbl\b/g, 'Ablenkung'],
+  [/\bMw\b/g, 'Missweisung'],
+  [/\bFw\b/g, 'Fehlweisung'],
+  [/\bDev\b/g, 'Deviation'],
+  [/\bHWH\b/g, 'Hochwasserhöhe'],
+  [/\bNWH\b/g, 'Niedrigwasserhöhe'],
+  [/\bHW\b/g, 'Hochwasser'],
+  [/\bNW\b/g, 'Niedrigwasser'],
+  [/\bKN\b/g, 'Kartennull'],
+  [/\bKT\b/g, 'Kartentiefe'],
+  [/\bWT\b/g, 'Wassertiefe'],
+  [/\bBV\b/g, 'Besteckversetzung'],
+  [/\bLüa\b/g, 'Länge über alles'],
+  [/\bNfS\b/g, 'Nachrichten für Seefahrer'],
+  [/\bkbl\b/g, 'Kabellängen'],
+  [/\bBft\b/g, 'Beaufort'],
+  [/\bsm\b/g, 'Seemeilen'],
+  [/\bkn\b/g, 'Knoten'],
+  [/\bm\/s\b/g, 'Meter pro Sekunde'],
+  [/\bkm\/h\b/g, 'Kilometer pro Stunde'],
+  [/\bhPa\b/g, 'Hektopascal'],
+  [/\bKVR\b/g, 'K V R'],
+  [/\bSeeSchStrO\b/g, 'Seeschifffahrtsstraßen-Ordnung'],
+  [/CO₂/g, 'C O 2'],
+  [/(\d)\s?°/g, '$1 Grad'],
+  [/\bkm\b/g, 'Kilometer'],
+  [/(\d)\s?m\b(?=[\s.,;)])/g, '$1 Meter'],
+];
+
 /** Abkürzungen ausschreiben, damit sie sinnvoll vorgelesen werden. */
 export function sayable(text) {
-  return text
-    .replace(/\bz\.\s?B\./g, 'zum Beispiel')
-    .replace(/\bu\.\s?a\./g, 'unter anderem')
-    .replace(/\bd\.\s?h\./g, 'das heißt')
-    .replace(/\bbzw\./g, 'beziehungsweise')
-    .replace(/\bggf\./g, 'gegebenenfalls')
-    .replace(/\bca\./g, 'circa')
-    .replace(/\bsm\b/g, 'Seemeilen')
-    .replace(/\bkn\b/g, 'Knoten')
-    .replace(/\bhPa\b/g, 'Hektopascal')
-    .replace(/\bKVR\b/g, 'K V R')
-    .replace(/\bSeeSchStrO\b/g, 'Seeschifffahrtsstraßen-Ordnung')
-    .replace(/(\d)\s?°/g, '$1 Grad')
-    .replace(/\bNr\.\s?/g, 'Nummer ')
-    .replace(/\bkm\b/g, 'Kilometer')
-    .replace(/\bm\b(?=[\s.,;])/g, 'Meter');
+  return ABBREVIATIONS.reduce((t, [re, repl]) => t.replace(re, repl), text);
 }
 
 let activeRecognition = null;

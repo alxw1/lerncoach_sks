@@ -63,3 +63,17 @@ test('Links zu Teilkatalogen und Katalogaufbau', () => {
   assert.equal(cat.questions[0].id, 'NAV-1');
   assert.equal(cat.questions.length, 10);
 });
+
+test('Katalog data/fragen.json ist vollständig', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const catalog = JSON.parse(await readFile(new URL('../data/fragen.json', import.meta.url), 'utf8'));
+  const expected = { navigation: 118, recht: 110, wetter: 101, seemannschaft1: 163, seemannschaft2: 146 };
+  for (const [cat, n] of Object.entries(expected)) {
+    const nrs = catalog.questions.filter((q) => q.category === cat).map((q) => q.nr);
+    assert.deepEqual(nrs, Array.from({ length: n }, (_, i) => i + 1), cat);
+  }
+  for (const q of catalog.questions) {
+    assert.ok(q.question.length > 5, `${q.id} ohne Frage`);
+    assert.ok(q.answer.length > 1, `${q.id} ohne Antwort`);
+  }
+});

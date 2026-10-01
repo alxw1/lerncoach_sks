@@ -42,10 +42,23 @@ test('Selbsteinschätzung per Sprache', () => {
   assert.equal(parseGrade('hmm'), null);
 });
 
-test('Eselsbrücken werden über Stichwörter gefunden', () => {
-  assert.match(findHint('Wie sind Kardinalzeichen gekennzeichnet?', ''), /Wespentaille/);
-  assert.match(findHint('Was ist die Missweisung?', ''), /Vom Kompass zur Karte/);
-  assert.equal(findHint('Wie heißt das?', 'leer'), null);
-  // "lee" darf nicht in "leer" treffen
-  assert.equal(findHint('Ist der Tank leer?', ''), null);
+test('Eselsbrücken sind fest Fragen zugeordnet', () => {
+  assert.match(findHint('NAV-64'), /Wespentaille/);
+  assert.match(findHint('REC-22'), /Rot über Rot/);
+  assert.equal(findHint('NAV-1'), null);
+});
+
+test('Eselsbrücken verweisen nur auf existierende Katalogfragen', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const { HINTS } = await import('../src/hints.js');
+  const catalog = JSON.parse(await readFile(new URL('../data/fragen.json', import.meta.url), 'utf8'));
+  const ids = new Set(catalog.questions.map((q) => q.id));
+  for (const h of HINTS) for (const id of h.ids) assert.ok(ids.has(id), `${id} fehlt im Katalog`);
+});
+
+test('Abkürzungen werden zum Vorlesen ausgeschrieben', async () => {
+  const { sayable } = await import('../src/speech.js');
+  assert.equal(sayable('Ggf. FdW mit 5 kn, z. B. 200 m.'), 'gegebenenfalls Fahrt durchs Wasser mit 5 Knoten, zum Beispiel 200 Meter.');
+  assert.equal(sayable('Abl + Mw = Fw'), 'Ablenkung + Missweisung = Fehlweisung');
+  assert.equal(sayable('Kurs 030°'), 'Kurs 030 Grad');
 });

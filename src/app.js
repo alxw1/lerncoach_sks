@@ -68,7 +68,7 @@ function activeQuestions({ forVoice }) {
   return catalog.questions.filter((q) =>
     (!settings.categories || settings.categories.includes(q.category))
     && q.answer
-    && !(forVoice && settings.audioOnly && q.images?.length));
+    && !(forVoice && settings.audioOnly && (q.images?.length || q.answerImages?.length)));
 }
 
 // ---------- Tageszähler für neue Fragen ----------
@@ -280,7 +280,7 @@ async function round(q, reason, gen) {
   }
   if (!userAnswer.trim() && !dontKnow) evaluation = { grade: 'falsch', feedback: 'Keine Antwort erkannt.', source: 'leer' };
 
-  const hint = evaluation.grade !== 'richtig' ? (evaluation.hint || findHint(q.question, q.answer)) : (evaluation.hint || null);
+  const hint = evaluation.grade !== 'richtig' ? (evaluation.hint || findHint(q.id)) : (evaluation.hint || null);
   const final = evaluation.source === 'claude' || evaluation.source === 'weissnicht' || evaluation.source === 'leer';
   showResult(q, evaluation, hint, final);
 
@@ -343,11 +343,18 @@ function showResult(q, ev, hint, final) {
   el.feedback.textContent = ev.source === 'claude' || ev.source === 'leer' || ev.source === 'weissnicht' ? ev.feedback : missing;
   el.hint.hidden = !hint;
   el.hint.querySelector('span').textContent = hint || '';
-  el.official.replaceChildren(...q.answer.split('\n').map((line) => {
-    const p = document.createElement('p');
-    p.textContent = line;
-    return p;
-  }));
+  el.official.replaceChildren(
+    ...q.answer.split('\n').map((line) => {
+      const p = document.createElement('p');
+      p.textContent = line;
+      return p;
+    }),
+    ...(q.answerImages || []).map((src) => {
+      const img = document.createElement('img');
+      img.src = src; img.alt = 'Lösungsskizze laut ELWIS'; img.className = 'answer-img';
+      return img;
+    }),
+  );
   el.boxChange.textContent = '';
   markGrade(ev.grade);
 }
