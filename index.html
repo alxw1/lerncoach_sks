@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>SKS-Lerncoach</title>
+  <meta name="description" content="Sprachgesteuerter Lerncoach für den Sportküstenschifferschein – ELWIS-Fragenkatalog mit Leitner-System">
+  <meta name="theme-color" content="#0b3d5c">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icons/icon.svg">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <h1>⚓ SKS-Lerncoach</h1>
+    <nav class="tabs" role="tablist">
+      <button role="tab" data-view="lernen" aria-selected="true">Lernen</button>
+      <button role="tab" data-view="statistik">Statistik</button>
+      <button role="tab" data-view="einstellungen">Einstellungen</button>
+    </nav>
+  </header>
+
+  <main>
+    <!-- LERNEN -->
+    <section id="view-lernen" class="view">
+      <div id="no-catalog" class="notice" hidden>
+        <h2>Fragenkatalog fehlt</h2>
+        <p>Es ist noch kein ELWIS-Fragenkatalog geladen. Unter <strong>Einstellungen → Fragenkatalog</strong> kannst du
+          <code>fragen.json</code> oder die gespeicherten ELWIS-Seiten importieren. Alternativ im Projekt
+          <code>npm run import:elwis</code> ausführen.</p>
+      </div>
+
+      <div id="start-panel" class="start-panel">
+        <button id="btn-drive" class="btn-huge">🚗 Autofahrt starten</button>
+        <button id="btn-manual" class="btn-secondary">Am Bildschirm lernen</button>
+        <p id="today" class="muted"></p>
+        <p id="voice-warning" class="warning" hidden></p>
+      </div>
+
+      <article id="card" class="card" hidden>
+        <div class="card-meta">
+          <span id="q-cat" class="chip"></span>
+          <span id="q-nr" class="chip"></span>
+          <span id="q-box" class="chip"></span>
+          <span id="q-conf" class="chip"></span>
+          <span id="q-reason" class="chip chip-soft"></span>
+        </div>
+        <h2 id="q-text" class="question"></h2>
+        <div id="q-images" class="images"></div>
+
+        <div id="answer-area">
+          <p id="status" class="status" aria-live="polite"></p>
+          <p id="transcript" class="transcript" aria-live="polite"></p>
+          <form id="answer-form" class="answer-form">
+            <textarea id="answer-input" rows="3" placeholder="Deine Antwort (oder 🎤 drücken)"></textarea>
+            <div class="row">
+              <button type="button" id="btn-mic" class="btn-secondary" title="Antwort diktieren">🎤</button>
+              <button type="submit" class="btn-primary">Antworten</button>
+              <button type="button" id="btn-dontknow" class="btn-secondary">Weiß nicht</button>
+            </div>
+          </form>
+        </div>
+
+        <div id="result" class="result" hidden>
+          <p id="verdict" class="verdict"></p>
+          <p id="feedback"></p>
+          <div id="hint" class="hint" hidden><strong>💡 Lernhilfe:</strong> <span></span></div>
+          <div class="official">
+            <h3>Antwort laut ELWIS</h3>
+            <div id="official-answer"></div>
+          </div>
+          <div class="grade-buttons" role="group" aria-label="Bewertung">
+            <button data-grade="richtig" class="grade g-richtig">✔ Richtig</button>
+            <button data-grade="teilweise" class="grade g-teilweise">◐ Teilweise</button>
+            <button data-grade="falsch" class="grade g-falsch">✘ Falsch</button>
+          </div>
+          <p id="box-change" class="muted"></p>
+        </div>
+
+        <div class="controls">
+          <button id="btn-repeat" class="btn-secondary">🔁 Wiederholen</button>
+          <button id="btn-skip" class="btn-secondary">⏭ Überspringen</button>
+          <button id="btn-next" class="btn-primary" hidden>Weiter ▶</button>
+          <button id="btn-stop" class="btn-danger">⏸ Pause</button>
+        </div>
+      </article>
+
+      <p class="disclaimer">Fragen und Antworten: amtlicher Fragenkatalog SKS (ELWIS). Eselsbrücken sind Lernhilfen, keine amtlichen Antworten. Keine Rechtsauskunft zur Prüfungsordnung.</p>
+    </section>
+
+    <!-- STATISTIK -->
+    <section id="view-statistik" class="view" hidden>
+      <div id="stats-total" class="stats-total"></div>
+      <table class="stats-table">
+        <thead>
+          <tr><th>Gebiet</th><th>Fragen</th><th>Gesehen</th><th>Quote richtig</th><th>Sicherheit</th><th>Sicher (Box 4–5)</th><th>Fällig</th></tr>
+        </thead>
+        <tbody id="stats-body"></tbody>
+      </table>
+      <h3>Lernboxen</h3>
+      <div id="stats-boxes" class="boxes"></div>
+      <h3>Wackelkandidaten</h3>
+      <ol id="stats-weak" class="weak-list"></ol>
+    </section>
+
+    <!-- EINSTELLUNGEN -->
+    <section id="view-einstellungen" class="view" hidden>
+      <fieldset>
+        <legend>Schwerpunktgebiete</legend>
+        <div id="cat-filter" class="checks"></div>
+        <label class="check"><input type="checkbox" id="opt-audio-only"> Im Auto nur Fragen ohne Abbildung</label>
+      </fieldset>
+
+      <fieldset>
+        <legend>Lernrhythmus</legend>
+        <label>Neue Fragen pro Tag <input type="number" id="opt-new" min="0" max="100" step="1"></label>
+        <label>Zwischenstand vorlesen alle <input type="number" id="opt-report" min="0" max="50" step="1"> Fragen</label>
+      </fieldset>
+
+      <fieldset>
+        <legend>Sprache</legend>
+        <label>Stimme <select id="opt-voice"></select></label>
+        <label>Sprechtempo <input type="range" id="opt-rate" min="0.7" max="1.4" step="0.05"> <span id="opt-rate-val"></span></label>
+        <label>Denkpause nach dem Sprechen (Sek.) <input type="number" id="opt-silence" min="1" max="6" step="0.5"></label>
+        <button id="btn-test-voice" class="btn-secondary">Stimme testen</button>
+      </fieldset>
+
+      <fieldset>
+        <legend>Bewertung durch Claude (optional)</legend>
+        <p class="muted">Ohne Schlüssel bewertet die App per Stichwortabgleich und du bestätigst per Sprache. Mit Schlüssel bewertet Claude den Inhalt und erzeugt passende Eselsbrücken. Der Schlüssel bleibt nur in diesem Browser gespeichert.</p>
+        <label>Anthropic API-Schlüssel <input type="password" id="opt-key" autocomplete="off" placeholder="sk-ant-…"></label>
+        <label>Modell <input type="text" id="opt-model" placeholder="claude-opus-5-5"></label>
+      </fieldset>
+
+      <fieldset>
+        <legend>Fragenkatalog</legend>
+        <p id="catalog-info" class="muted"></p>
+        <label>Importieren: <code>fragen.json</code> oder gespeicherte ELWIS-HTML-Seiten
+          <input type="file" id="catalog-file" accept=".json,.html,.htm" multiple></label>
+        <button id="btn-catalog-reset" class="btn-secondary">Mitgelieferten Katalog verwenden</button>
+        <pre id="import-log" class="log" hidden></pre>
+      </fieldset>
+
+      <fieldset>
+        <legend>Lernstand</legend>
+        <p class="muted">Der Lernstand wird im Browser gespeichert. Zum Gerätewechsel exportieren und dort importieren.</p>
+        <div class="row">
+          <button id="btn-export" class="btn-secondary">Exportieren</button>
+          <label class="btn-secondary file-btn">Importieren <input type="file" id="state-file" accept=".json" hidden></label>
+          <button id="btn-reset" class="btn-danger">Zurücksetzen</button>
+        </div>
+      </fieldset>
+    </section>
+  </main>
+
+  <script type="module" src="src/app.js"></script>
+</body>
+</html>

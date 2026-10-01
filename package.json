@@ -1,0 +1,15 @@
+{
+  "name": "sks-lerncoach",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Sprachgesteuerter SKS-Lerncoach mit Leitner-System auf Basis des ELWIS-Fragenkatalogs",
+  "type": "module",
+  "scripts": {
+    "import:elwis": "node scripts/import-elwis.mjs",
+    "test": "node --test tests/*.test.mjs",
+    "start": "npx http-server -c-1 -p 8080 ."
+  },
+  "devDependencies": {
+    "linkedom": "^0.18.5"
+  }
+}
