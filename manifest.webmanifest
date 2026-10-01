@@ -1,0 +1,11 @@
+{
+  "name": "SKS-Lerncoach",
+  "short_name": "SKS-Coach",
+  "description": "Sprachgesteuerter Lerncoach für den Sportküstenschifferschein",
+  "lang": "de",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#0c1720",
+  "theme_color": "#0b3d5c",
+  "icons": [{ "src": "icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }]
+}
