@@ -1,6 +1,10 @@
-// Bewertung einer gesprochenen Antwort.
-// 1. Lokal: Schlüsselwort-Abgleich mit der ELWIS-Antwort (offline, sofort).
-// 2. Optional: Claude bewertet inhaltlich und liefert eine Eselsbrücke.
+// Bewertung einer gesprochenen Antwort: Richtigkeit in Prozent, ab PASS_PERCENT gilt sie als richtig.
+// 1. Mit OpenAI-API-Schlüssel: Die KI vergleicht inhaltlich mit der ELWIS-Antwort.
+// 2. Ohne Schlüssel oder offline: Stichwortabgleich mit der ELWIS-Antwort.
+
+/** Mehr als 80 % Richtigkeit = richtig, sonst falsch. */
+export const PASS_PERCENT = 80;
+export const gradeFor = (percent) => (percent > PASS_PERCENT ? 'richtig' : 'falsch');
 
 const STOPWORDS = new Set(`
 aber alle allem allen aller alles als also am an ander andere anderem anderen anderer anderes auch auf aus bei beim bin bis bist da dabei damit
@@ -59,66 +63,76 @@ export function keywordScore(userAnswer, officialAnswer) {
 
 export function localGrade(userAnswer, officialAnswer) {
   const { score, matched, missing } = keywordScore(userAnswer, officialAnswer);
-  const grade = score >= 0.55 ? 'richtig' : score >= 0.2 ? 'teilweise' : 'falsch';
-  return { grade, score, matched, missing, source: 'lokal' };
+  const percent = Math.round(score * 100);
+  return { grade: gradeFor(percent), percent, matched, missing, source: 'lokal' };
 }
 
 const GRADE_SCHEMA = {
   type: 'object',
   properties: {
-    bewertung: { type: 'string', enum: ['richtig', 'teilweise', 'falsch'] },
+    richtigkeit: { type: 'integer', description: 'Inhaltliche Übereinstimmung mit der ELWIS-Musterantwort in Prozent, 0 bis 100.' },
     rueckmeldung: { type: 'string', description: 'Ein bis zwei kurze Sätze: was stimmte, was fehlte. Vorlesbar, ohne Aufzählungszeichen.' },
-    lernhilfe: { type: 'string', description: 'Kurze Eselsbrücke oder Merkhilfe (max. 2 Sätze), leer wenn richtig und keine nötig.' },
+    lernhilfe: { type: 'string', description: 'Kurze Eselsbrücke oder Merkhilfe (max. 2 Sätze); leerer Text, wenn keine nötig ist.' },
   },
-  required: ['bewertung', 'rueckmeldung', 'lernhilfe'],
+  required: ['richtigkeit', 'rueckmeldung', 'lernhilfe'],
   additionalProperties: false,
 };
 
 const SYSTEM = `Du bist Prüfer und Lerncoach für den deutschen Sportküstenschifferschein (SKS).
 Du bewertest eine mündliche Antwort, die per Spracherkennung transkribiert wurde (Tippfehler, fehlende Satzzeichen und falsch erkannte Fachbegriffe sind möglich – bewerte den Inhalt wohlwollend, aber fachlich streng).
-Maßstab ist ausschließlich die offizielle ELWIS-Musterantwort. Bewertung:
-- "richtig": alle wesentlichen Inhalte der Musterantwort sind genannt (andere Formulierung ist ok).
-- "teilweise": ein Teil der wesentlichen Inhalte fehlt oder ist ungenau.
-- "falsch": wesentliche Inhalte fehlen oder sind falsch.
+Maßstab ist ausschließlich die offizielle ELWIS-Musterantwort. Wie in der Prüfung zählt, in welchem Umfang die Antwort mit dem sachlichen Inhalt, der Vollständigkeit und der Fachterminologie der Musterantwort übereinstimmt; wörtliche Übereinstimmung ist nicht nötig.
+Gib die Richtigkeit in Prozent an (0 = nichts Zutreffendes, 100 = alle wesentlichen Inhalte korrekt). Fehlende Teile einer mehrteiligen Musterantwort senken die Prozentzahl anteilig, sachliche Fehler deutlich.
 Die Rückmeldung wird während einer Autofahrt vorgelesen: kurz, klar, motivierend, keine Listen, keine Sonderzeichen.
-Die Lernhilfe ist eine Eselsbrücke oder ein Merksatz, der beim Behalten der Musterantwort hilft. Erfinde keine neuen Prüfungsinhalte, die über die Musterantwort hinausgehen.`;
+Die Lernhilfe ist eine Eselsbrücke oder ein Merksatz, der beim Behalten der Musterantwort hilft. Erfinde keine Prüfungsinhalte, die über die Musterantwort hinausgehen.`;
 
-let sdkPromise = null;
-function loadSdk() {
-  // Das SDK wird nur geladen, wenn ein API-Schlüssel hinterlegt ist.
-  sdkPromise ||= import('https://cdn.jsdelivr.net/npm/@anthropic-ai/sdk/+esm');
-  return sdkPromise;
-}
+export const DEFAULT_OPENAI_MODEL = 'gpt-5-mini';
 
 /**
+ * Bewertung über die OpenAI Chat Completions API mit strukturierter JSON-Ausgabe.
  * @param {{apiKey: string, model: string}} settings
  */
-export async function claudeGrade({ question, officialAnswer, userAnswer, settings, signal }) {
-  const { default: Anthropic } = await loadSdk();
-  const client = new Anthropic({ apiKey: settings.apiKey, dangerouslyAllowBrowser: true, maxRetries: 1, timeout: 30_000 });
-  const response = await client.beta.messages.create({
-    model: settings.model || 'claude-opus-5-5',
-    max_tokens: 2000,
-    betas: ['server-side-fallback-2026-07-01'],
-    fallbacks: 'default',
-    system: SYSTEM,
-    output_config: {
-      effort: 'low', // kurze Wartezeit im Auto ist wichtiger als Tiefe
-      format: { type: 'json_schema', schema: GRADE_SCHEMA },
+export async function openaiGrade({ question, officialAnswer, userAnswer, settings, signal }) {
+  const model = settings.model || DEFAULT_OPENAI_MODEL;
+  const body = {
+    model,
+    messages: [
+      { role: 'system', content: SYSTEM },
+      {
+        role: 'user',
+        content: `Frage: ${question}\n\nELWIS-Musterantwort:\n${officialAnswer}\n\nAntwort des Prüflings (transkribiert):\n${userAnswer || '(keine Antwort)'}`,
+      },
+    ],
+    response_format: {
+      type: 'json_schema',
+      json_schema: { name: 'bewertung', strict: true, schema: GRADE_SCHEMA },
     },
-    messages: [{
-      role: 'user',
-      content: `Frage: ${question}\n\nELWIS-Musterantwort:\n${officialAnswer}\n\nAntwort des Prüflings (transkribiert):\n${userAnswer || '(keine Antwort)'}`,
-    }],
-  }, { signal });
+  };
+  // Reasoning-Modelle (gpt-5…, o…): kurze Denkzeit, damit im Auto keine lange Pause entsteht
+  if (/^(gpt-5|o\d)/.test(model)) body.reasoning_effort = 'low';
 
-  if (response.stop_reason === 'refusal') throw new Error('Claude hat die Bewertung abgelehnt');
-  const text = response.content.filter((b) => b.type === 'text').map((b) => b.text).join('');
-  const data = JSON.parse(text);
+  const timeout = AbortSignal.timeout(30_000);
+  const res = await fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${settings.apiKey}` },
+    body: JSON.stringify(body),
+    signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
+  });
+  if (!res.ok) {
+    let detail = '';
+    try { detail = (await res.json()).error?.message || ''; } catch { /* kein JSON */ }
+    throw new Error(`OpenAI ${res.status}${detail ? `: ${detail}` : ''}`);
+  }
+  const data = await res.json();
+  const msg = data.choices?.[0]?.message;
+  if (!msg || msg.refusal) throw new Error('OpenAI hat die Bewertung abgelehnt');
+  const out = JSON.parse(msg.content);
+  const percent = Math.max(0, Math.min(100, Math.round(Number(out.richtigkeit))));
+  if (!Number.isFinite(percent)) throw new Error('Ungültige Antwort von OpenAI');
   return {
-    grade: data.bewertung,
-    feedback: data.rueckmeldung,
-    hint: data.lernhilfe,
-    source: 'claude',
+    grade: gradeFor(percent),
+    percent,
+    feedback: out.rueckmeldung,
+    hint: out.lernhilfe || null,
+    source: 'openai',
   };
 }

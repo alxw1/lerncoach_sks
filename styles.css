@@ -93,16 +93,14 @@ textarea {
 .result p { margin: 0; }
 .verdict { font-size: 1.3rem; font-weight: 700; }
 .v-richtig { color: var(--ok); }
-.v-teilweise { color: var(--mid); }
 .v-falsch { color: var(--bad); }
 .hint { background: color-mix(in srgb, var(--mid) 14%, transparent); border-radius: 10px; padding: 10px 12px; }
 .official { background: var(--soft); border-radius: 10px; padding: 10px 12px; }
 .official h3 { margin: 0 0 6px; font-size: .9rem; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
 .official p { margin: 0 0 4px; }
-.grade-buttons { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.grade-buttons { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
 .grade { background: var(--surface); color: var(--text); font-weight: 600; }
 .grade.selected.g-richtig { background: var(--ok); color: #fff; border-color: var(--ok); }
-.grade.selected.g-teilweise { background: var(--mid); color: #1b1300; border-color: var(--mid); }
 .grade.selected.g-falsch { background: var(--bad); color: #fff; border-color: var(--bad); }
 .controls { display: flex; flex-wrap: wrap; gap: 8px; }
 .controls .btn-primary { margin-left: auto; }
@@ -111,7 +109,8 @@ textarea {
 /* Autofahrt: alles groß, wenig Ablenkung */
 body.drive .question { font-size: 1.7rem; }
 body.drive .controls button { flex: 1 1 40%; padding: 20px 12px; font-size: 1.2rem; }
-body.drive .grade-buttons, body.drive .official, body.drive .images { display: none; }
+body.drive .grade-buttons, body.drive .images { display: none; }
+body.drive .official { font-size: 1.1rem; }
 body.drive .status { font-size: 1.3rem; }
 
 /* Statistik */
@@ -150,3 +149,13 @@ input[type="number"], input[type="text"], input[type="password"], select {
 .log { white-space: pre-wrap; background: var(--soft); padding: 10px; border-radius: 8px; font-size: .85rem; max-height: 240px; overflow: auto; }
 code { background: var(--soft); padding: 1px 5px; border-radius: 4px; }
 .answer-img { display: block; max-width: 100%; max-height: 280px; margin-top: 8px; border-radius: 8px; background: #fff; }
+
+/* Richtigkeit als Statusbalken, Markierung bei der 80-%-Grenze */
+.score { display: grid; gap: 4px; }
+.score-label { display: flex; justify-content: space-between; align-items: baseline; }
+.score-label strong { font-size: 1.3rem; }
+.score-bar { position: relative; height: 18px; background: var(--soft); border-radius: 999px; overflow: hidden; }
+.score-fill { height: 100%; width: 0; background: var(--bad); border-radius: 999px; transition: width .6s ease; }
+.score-bar[data-pass="true"] .score-fill { background: var(--ok); }
+.score-mark { position: absolute; top: 0; bottom: 0; left: 80%; width: 2px; background: var(--text); opacity: .55; }
+.official { border-left: 4px solid var(--primary); }

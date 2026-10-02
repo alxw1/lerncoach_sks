@@ -1,5 +1,5 @@
 // Offline-Unterstützung: erst Netz, bei Funkloch aus dem Cache.
-const CACHE = 'sks-lerncoach-v2';
+const CACHE = 'sks-lerncoach-v3';
 const SHELL = ['./', 'index.html', 'styles.css', 'manifest.webmanifest', 'icons/icon.svg',
   'src/app.js', 'src/leitner.js', 'src/grader.js', 'src/hints.js', 'src/speech.js', 'src/elwis-parser.js', 'data/fragen.json'];
 

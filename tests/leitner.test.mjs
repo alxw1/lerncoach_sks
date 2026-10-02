@@ -16,11 +16,16 @@ test('richtig steigt eine Box, falsch fällt auf Box 1', () => {
   assert.equal(c.due, NOW);
 });
 
-test('teilweise fällt eine Box, aber nie unter 1', () => {
-  let c = applyGrade(newCard(), 'teilweise', NOW);
+test('nur richtig oder falsch – teilweise gibt es nicht', () => {
+  assert.throws(() => applyGrade(newCard(), 'teilweise', NOW));
+});
+
+test('Sicherheit folgt der gemessenen Richtigkeit in Prozent', () => {
+  let c = applyGrade(newCard(), 'richtig', NOW, 90);
+  assert.equal(c.confidence, 54); // erste Antwort: 90 % × 0,6
+  c = applyGrade(c, 'falsch', NOW, 40);
   assert.equal(c.box, 1);
-  c = { ...c, box: 4 };
-  assert.equal(applyGrade(c, 'teilweise', NOW).box, 3);
+  assert.equal(c.confidence, Math.round(54 * 0.6 + 40 * 0.4));
 });
 
 test('Box 5 ist das Maximum', () => {
@@ -87,7 +92,7 @@ test('Statistik je Gebiet', () => {
   const questions = qs(4); // navigation: Q-1, Q-3 · wetter: Q-2, Q-4
   recordAnswer(state, 'Q-1', 'richtig', NOW);
   recordAnswer(state, 'Q-1', 'falsch', NOW);
-  recordAnswer(state, 'Q-2', 'teilweise', NOW);
+  recordAnswer(state, 'Q-2', 'richtig', NOW);
   const s = computeStats(questions, [{ id: 'navigation', name: 'Navigation' }, { id: 'wetter', name: 'Wetterkunde' }], state, NOW);
   const nav = s.categories.find((c) => c.id === 'navigation');
   const wet = s.categories.find((c) => c.id === 'wetter');
@@ -95,7 +100,7 @@ test('Statistik je Gebiet', () => {
   assert.equal(nav.seen, 1);
   assert.equal(nav.correctRate, 50);
   assert.equal(nav.coverage, 50);
-  assert.equal(wet.correctRate, 50);
+  assert.equal(wet.correctRate, 100);
   assert.equal(s.total.answers, 3);
   assert.equal(s.total.boxes[0], 2);
 });

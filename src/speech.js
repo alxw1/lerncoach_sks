@@ -204,8 +204,8 @@ export function parseCommand(text) {
 /** Selbsteinschätzung per Sprache. */
 export function parseGrade(text) {
   const t = (text || '').toLowerCase();
-  if (/\b(teilweise|halb|teils|so halb|fast|ungefähr)\b/.test(t)) return 'teilweise';
-  if (/\b(falsch|nein|nicht gewusst|leider nicht|daneben)\b/.test(t)) return 'falsch';
+  // Es gibt nur richtig oder falsch – „teilweise“ zählt als falsch.
+  if (/\b(falsch|nein|nicht gewusst|leider nicht|daneben|teilweise|halb|teils|fast)\b/.test(t)) return 'falsch';
   if (/\b(okay|ok|einverstanden|passt)\b/.test(t)) return 'ok';
   if (/\b(richtig|ja|stimmt|korrekt|gewusst|genau)\b/.test(t)) return 'richtig';
   return null;
