@@ -98,3 +98,12 @@ test('OpenAI-Bewertung: Anfrage mit JSON-Schema, Ergebnis ab mehr als 80 % richt
     globalThis.fetch = realFetch;
   }
 });
+
+test('Verständliche Fehlermeldungen für den Verbindungstest', async () => {
+  const { explainOpenAIError } = await import('../src/grader.js');
+  const withStatus = (status) => Object.assign(new Error('x'), { status });
+  assert.match(explainOpenAIError(withStatus(401)), /Schlüssel ungültig/);
+  assert.match(explainOpenAIError(withStatus(404)), /Modell nicht gefunden/);
+  assert.match(explainOpenAIError(withStatus(429)), /Guthaben/);
+  assert.match(explainOpenAIError(new TypeError('Failed to fetch')), /Keine Verbindung/);
+});

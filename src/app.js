@@ -1,8 +1,11 @@
 import { emptyState, getCard, recordAnswer, pickNext, computeStats } from './leitner.js';
-import { localGrade, openaiGrade, DEFAULT_OPENAI_MODEL, PASS_PERCENT } from './grader.js';
+import { localGrade, openaiGrade, explainOpenAIError, DEFAULT_OPENAI_MODEL, PASS_PERCENT } from './grader.js';
 import { findHint } from './hints.js';
 import { parseElwisPage, buildCatalog, CATEGORIES } from './elwis-parser.js';
 import * as speech from './speech.js';
+
+// Bei jeder Veröffentlichung anpassen (auch CACHE in sw.js) – wird unter „Lernen“ angezeigt.
+export const APP_VERSION = '2026-10-02b · API-Test in den Einstellungen';
 
 // ---------- Speicher ----------
 const KEYS = { state: 'sks.state', settings: 'sks.settings', catalog: 'sks.catalog' };
@@ -450,6 +453,11 @@ function esc(s) {
   return String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 }
 
+function renderVersion() {
+  const v = document.querySelector('#app-version');
+  if (v) v.textContent = `Version ${APP_VERSION}`;
+}
+
 function renderToday(message) {
   if (!catalog) return;
   const qs = activeQuestions({ forVoice: false });
@@ -519,6 +527,7 @@ function bindSettings() {
   $('#btn-test-voice').addEventListener('click', () => speech.speak('Steuerbord ist rechts, Backbord ist links. Gute Fahrt!'));
   $('#opt-key').addEventListener('change', (e) => { settings.apiKey = e.target.value.trim(); saveSettings(); });
   $('#opt-model').addEventListener('change', (e) => { settings.model = e.target.value.trim() || DEFAULT_SETTINGS.model; saveSettings(); });
+  $('#btn-test-key').addEventListener('click', testOpenAI);
   window.speechSynthesis?.addEventListener?.('voiceschanged', renderVoices);
 
   $('#catalog-file').addEventListener('change', (e) => importCatalogFiles([...e.target.files]));
@@ -552,6 +561,58 @@ function bindSettings() {
     state = emptyState();
     saveState(); renderStats(); renderToday();
   });
+}
+
+/** Prüft Schlüssel und Modell mit einer echten Testbewertung (Frage NAV-1 mit der ELWIS-Antwort als Antwort). */
+async function testOpenAI() {
+  // Eingaben übernehmen, auch wenn das Feld noch nicht verlassen wurde
+  settings.apiKey = $('#opt-key').value.trim();
+  settings.model = $('#opt-model').value.trim() || DEFAULT_SETTINGS.model;
+  saveSettings();
+  const box = $('#key-test-result');
+  const btn = $('#btn-test-key');
+  box.hidden = false;
+  box.className = 'key-test';
+  if (!settings.apiKey) {
+    box.classList.add('fail');
+    box.textContent = 'Bitte zuerst einen API-Schlüssel eintragen.';
+    return;
+  }
+  if (!/^sk-/.test(settings.apiKey)) {
+    box.classList.add('fail');
+    box.textContent = 'Das sieht nicht nach einem OpenAI-Schlüssel aus – er beginnt mit „sk-“.';
+    return;
+  }
+  const q = catalog?.questions?.find((x) => x.id === 'NAV-1')
+    || { question: 'Was ist Wind?', answer: 'Bewegte Luft.' };
+  btn.disabled = true;
+  box.textContent = `⏳ Teste ${settings.model} …`;
+  const start = performance.now();
+  try {
+    const r = await openaiGrade({ question: q.question, officialAnswer: q.answer, userAnswer: q.answer, settings });
+    const secs = ((performance.now() - start) / 1000).toFixed(1).replace('.', ',');
+    const plausible = r.grade === 'richtig';
+    box.classList.add(plausible ? 'ok' : 'warn');
+    box.replaceChildren(
+      Object.assign(document.createElement('strong'), { textContent: '✔ Verbindung funktioniert' }),
+      document.createElement('br'),
+      `Modell ${r.model} · Antwortzeit ${secs} s`,
+      document.createElement('br'),
+      `Testbewertung der ELWIS-Musterantwort: ${r.percent} % (${r.grade})`,
+      ...(plausible ? [] : [document.createElement('br'), 'Hinweis: Die Musterantwort sollte über 80 % erreichen – evtl. ein stärkeres Modell wählen.']),
+    );
+  } catch (e) {
+    box.classList.add('fail');
+    box.replaceChildren(
+      Object.assign(document.createElement('strong'), { textContent: '✘ Test fehlgeschlagen' }),
+      document.createElement('br'),
+      explainOpenAIError(e),
+      document.createElement('br'),
+      Object.assign(document.createElement('small'), { textContent: `Details: ${e.message}` }),
+    );
+  } finally {
+    btn.disabled = false;
+  }
 }
 
 async function importCatalogFiles(files) {
@@ -651,11 +712,18 @@ async function init() {
   renderSettings();
 }
 
+renderVersion();
 bindTabs();
 bindLearn();
 bindSettings();
 init();
 
 if ('serviceWorker' in navigator && location.protocol === 'https:') {
-  navigator.serviceWorker.register('sw.js').catch(() => {});
+  // Ersetzt ein neuer Service Worker einen alten, einmal neu laden – so ist sofort die neue Version aktiv.
+  const hadController = !!navigator.serviceWorker.controller;
+  let reloaded = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (hadController && !reloaded && !session.mode) { reloaded = true; location.reload(); }
+  });
+  navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).then((reg) => reg.update()).catch(() => {});
 }
