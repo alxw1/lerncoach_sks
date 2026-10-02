@@ -1,5 +1,5 @@
 import { emptyState, getCard, recordAnswer, pickNext, computeStats } from './leitner.js';
-import { localGrade, claudeGrade } from './grader.js';
+import { localGrade, openaiGrade, DEFAULT_OPENAI_MODEL, PASS_PERCENT } from './grader.js';
 import { findHint } from './hints.js';
 import { parseElwisPage, buildCatalog, CATEGORIES } from './elwis-parser.js';
 import * as speech from './speech.js';
@@ -15,7 +15,7 @@ const DEFAULT_SETTINGS = {
   rate: 1.0,
   silence: 2.2,
   apiKey: '',
-  model: 'claude-opus-5-5',
+  model: DEFAULT_OPENAI_MODEL,
 };
 
 function load(key, fallback) {
@@ -30,6 +30,9 @@ function save(key, value) {
 
 let state = load(KEYS.state, null) || emptyState();
 let settings = { ...DEFAULT_SETTINGS, ...load(KEYS.settings, {}) };
+// Umstieg von der früheren Claude-Bewertung: Modell und Anthropic-Schlüssel passen nicht zu OpenAI
+if (/^claude/.test(settings.model)) settings.model = DEFAULT_OPENAI_MODEL;
+if (/^sk-ant-/.test(settings.apiKey)) settings.apiKey = '';
 let catalog = null;
 
 const saveState = () => save(KEYS.state, state);
@@ -44,7 +47,8 @@ const el = {
   qText: $('#q-text'), qImages: $('#q-images'),
   status: $('#status'), transcript: $('#transcript'), form: $('#answer-form'), input: $('#answer-input'),
   answerArea: $('#answer-area'), result: $('#result'), verdict: $('#verdict'), feedback: $('#feedback'),
-  hint: $('#hint'), official: $('#official-answer'), boxChange: $('#box-change'),
+  hint: $('#hint'), officialBox: $('#official'), official: $('#official-answer'), boxChange: $('#box-change'),
+  scoreValue: $('#score-value'), scoreFill: $('#score-fill'), scoreBar: $('#score-bar'), scoreSource: $('#score-source'),
   btnNext: $('#btn-next'),
 };
 
@@ -214,6 +218,7 @@ function showQuestion(q, reason) {
   }));
   el.answerArea.hidden = false;
   el.form.hidden = session.mode === 'auto';
+  el.officialBox.hidden = true;
   el.result.hidden = true;
   el.btnNext.hidden = true;
   el.input.value = '';
@@ -260,18 +265,18 @@ async function round(q, reason, gen) {
   }
 
   // 2. Bewerten
-  el.answerArea.hidden = session.mode !== 'auto';
+  el.answerArea.hidden = false; // eigene Antwort bleibt zum Vergleich sichtbar
   el.form.hidden = true;
   let evaluation;
   if (dontKnow) {
     evaluation = { grade: 'falsch', feedback: 'Kein Problem – genau dafür üben wir.', source: 'weissnicht' };
-  } else if (settings.apiKey) {
-    setStatus('⏳ Claude bewertet …');
+  } else if (settings.apiKey && userAnswer.trim()) {
+    setStatus('⏳ KI bewertet …');
     try {
-      evaluation = await claudeGrade({ question: q.question, officialAnswer: q.answer, userAnswer, settings });
+      evaluation = await openaiGrade({ question: q.question, officialAnswer: q.answer, userAnswer, settings });
     } catch (e) {
-      console.warn('Claude-Bewertung fehlgeschlagen, nutze Stichwortabgleich', e);
-      evaluation = localGrade(userAnswer, q.answer);
+      console.warn('OpenAI-Bewertung fehlgeschlagen, nutze Stichwortabgleich', e);
+      evaluation = { ...localGrade(userAnswer, q.answer), error: e.message };
     }
     guard(gen);
     setStatus('');
@@ -279,19 +284,20 @@ async function round(q, reason, gen) {
     evaluation = localGrade(userAnswer, q.answer);
   }
   if (!userAnswer.trim() && !dontKnow) evaluation = { grade: 'falsch', feedback: 'Keine Antwort erkannt.', source: 'leer' };
+  if (evaluation.percent == null) evaluation.percent = 0;
 
   const hint = evaluation.grade !== 'richtig' ? (evaluation.hint || findHint(q.id)) : (evaluation.hint || null);
-  const final = evaluation.source === 'claude' || evaluation.source === 'weissnicht' || evaluation.source === 'leer';
+  const final = evaluation.source !== 'lokal';
   showResult(q, evaluation, hint, final);
 
   // 3. Rückmeldung, Lernhilfe, ELWIS-Antwort
   if (session.mode === 'auto') {
     const verdictText = evaluation.source === 'weissnicht' ? evaluation.feedback
-      : final ? `${verdictPhrase(evaluation.grade)} ${evaluation.feedback || ''}`
-        : `Mein Eindruck: ${tentativePhrase(evaluation.grade)}`;
+      : final ? `${verdictPhrase(evaluation.grade)} ${evaluation.percent} Prozent. ${evaluation.feedback || ''}`
+        : `Mein Eindruck: etwa ${evaluation.percent} Prozent, also ${tentativePhrase(evaluation.grade)}`;
     await say(verdictText, gen);
-    if (hint) await say(`Eselsbrücke: ${hint}`, gen);
     await say(`Die Antwort laut ELWIS: ${q.answer}`, gen);
+    if (hint) await say(`Eselsbrücke: ${hint}`, gen);
   }
 
   // 4. Bewertung festlegen
@@ -301,12 +307,14 @@ async function round(q, reason, gen) {
   } else {
     el.btnNext.hidden = false;
     const picked = await waitForUser(gen);
-    if (['richtig', 'teilweise', 'falsch'].includes(picked)) grade = picked;
+    if (['richtig', 'falsch'].includes(picked)) grade = picked;
   }
 
   // 5. Leitner aktualisieren
   const wasNew = getCard(state, q.id).box === 0;
-  const { before, after } = recordAnswer(state, q.id, grade);
+  // Bei eigener Korrektur der Einschätzung zählt die Entscheidung, nicht der Schätzwert
+  const percent = grade === evaluation.grade ? evaluation.percent : null;
+  const { before, after } = recordAnswer(state, q.id, grade, Date.now(), percent);
   newAllowedToday();
   if (wasNew) state.daily.newCount++;
   state.daily.answered++;
@@ -318,7 +326,7 @@ async function round(q, reason, gen) {
 }
 
 async function askSelfGrade(suggested, gen) {
-  await say('Wie war deine Antwort? Sag richtig, teilweise oder falsch – oder okay für meine Einschätzung.', gen);
+  await say('Wie war deine Antwort? Sag richtig oder falsch – oder okay für meine Einschätzung.', gen);
   for (let i = 0; i < 2; i++) {
     const heard = await hear(gen, { silenceMs: 1200, maxMs: 12000 });
     const cmd = speech.parseCommand(heard);
@@ -326,7 +334,7 @@ async function askSelfGrade(suggested, gen) {
     const g = speech.parseGrade(heard);
     if (g === 'ok' || (cmd === 'stille' && i === 1)) return suggested;
     if (g) { markGrade(g); return g; }
-    if (i === 0) await say('Richtig, teilweise oder falsch?', gen);
+    if (i === 0) await say('Richtig oder falsch?', gen);
   }
   return suggested;
 }
@@ -340,9 +348,11 @@ function showResult(q, ev, hint, final) {
   el.verdict.className = `verdict v-${ev.grade}`;
   el.verdict.textContent = final ? verdictPhrase(ev.grade) : `Einschätzung: ${tentativePhrase(ev.grade)} (bitte bestätigen)`;
   const missing = ev.missing?.length && ev.grade !== 'richtig' ? `Fehlende Stichworte z. B.: ${ev.missing.slice(0, 6).join(', ')}` : '';
-  el.feedback.textContent = ev.source === 'claude' || ev.source === 'leer' || ev.source === 'weissnicht' ? ev.feedback : missing;
+  el.feedback.textContent = ev.source === 'lokal' ? missing : ev.feedback;
+  showScore(ev);
   el.hint.hidden = !hint;
   el.hint.querySelector('span').textContent = hint || '';
+  el.officialBox.hidden = false;
   el.official.replaceChildren(
     ...q.answer.split('\n').map((line) => {
       const p = document.createElement('p');
@@ -359,16 +369,30 @@ function showResult(q, ev, hint, final) {
   markGrade(ev.grade);
 }
 
+/** Statusbalken für die Richtigkeit in Prozent, mit Markierung der 80-%-Grenze. */
+function showScore(ev) {
+  const pct = ev.percent ?? 0;
+  el.scoreValue.textContent = `${pct} %`;
+  el.scoreFill.style.width = `${pct}%`;
+  el.scoreBar.dataset.pass = String(pct > PASS_PERCENT);
+  el.scoreBar.setAttribute('aria-valuenow', String(pct));
+  el.scoreSource.textContent = {
+    openai: `Bewertung durch KI (OpenAI) · richtig ab mehr als ${PASS_PERCENT} %`,
+    lokal: `Schätzung per Stichwortabgleich${ev.error ? ` (KI nicht erreichbar: ${ev.error})` : ''} · richtig ab mehr als ${PASS_PERCENT} %`,
+    weissnicht: 'Keine Antwort gegeben',
+    leer: 'Keine Antwort erkannt',
+  }[ev.source] || '';
+}
+
 const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
 function verdictPhrase(g) {
   return {
     richtig: pick(['Richtig, sehr gut!', 'Stimmt genau!', 'Klasse, richtig!']),
-    teilweise: pick(['Teilweise richtig.', 'Fast – da fehlt noch etwas.']),
     falsch: pick(['Das war leider nicht richtig.', 'Nicht ganz – das schauen wir uns an.']),
   }[g];
 }
 function tentativePhrase(g) {
-  return { richtig: 'richtig.', teilweise: 'teilweise richtig.', falsch: 'eher nicht richtig.' }[g];
+  return { richtig: 'richtig.', falsch: 'eher nicht richtig.' }[g];
 }
 function boxChangeText(before, after) {
   if (!before.box) return `Neu einsortiert in Box ${after.box}.`;
@@ -596,7 +620,7 @@ function bindLearn() {
   });
   document.addEventListener('keydown', (e) => {
     if (session.mode !== 'manual' || el.result.hidden || e.target === el.input) return;
-    const map = { 1: 'richtig', 2: 'teilweise', 3: 'falsch', r: 'richtig', t: 'teilweise', f: 'falsch', Enter: 'weiter', ' ': 'weiter' };
+    const map = { 1: 'richtig', 2: 'falsch', r: 'richtig', f: 'falsch', Enter: 'weiter', ' ': 'weiter' };
     if (map[e.key]) { e.preventDefault(); resolveWaiter(map[e.key]); }
   });
 }

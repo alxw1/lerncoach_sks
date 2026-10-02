@@ -8,7 +8,7 @@ export const INTERVAL_DAYS = { 1: 0, 2: 1, 3: 3, 4: 7, 5: 14 };
 // derselben Sitzung erneut kommt.
 const SESSION_GAP = 4;
 
-export const SCORE = { richtig: 1, teilweise: 0.5, falsch: 0 };
+export const SCORE = { richtig: 1, falsch: 0 };
 
 export function emptyState() {
   return { version: 1, cards: {}, sessions: 0, createdAt: Date.now() };
@@ -19,7 +19,6 @@ export function newCard() {
     box: 0, // 0 = noch nie gefragt
     seen: 0,
     richtig: 0,
-    teilweise: 0,
     falsch: 0,
     confidence: 0, // 0–100 %
     lastSeen: 0,
@@ -34,38 +33,35 @@ export function getCard(state, id) {
 
 /**
  * Wendet eine Bewertung auf eine Karte an und gibt die neue Karte zurück.
- * richtig  → eine Box höher (max. 5)
- * teilweise → eine Box tiefer (min. 1), bald wieder dran
- * falsch   → zurück in Box 1
+ * richtig → eine Box höher (max. 5)
+ * falsch  → zurück in Box 1
+ * percent: gemessene Richtigkeit (0–100) der Antwort; ohne Angabe 100 bzw. 0.
  */
-export function applyGrade(card, grade, now = Date.now()) {
+export function applyGrade(card, grade, now = Date.now(), percent = null) {
   if (!(grade in SCORE)) throw new Error(`Unbekannte Bewertung: ${grade}`);
   const c = { ...card, history: [...card.history] };
-  const score = SCORE[grade];
-  const prevBox = c.box || 1;
+  const score = Number.isFinite(percent) ? percent / 100 : SCORE[grade];
 
-  if (grade === 'richtig') c.box = c.box === 0 ? 2 : Math.min(BOXES, c.box + 1);
-  else if (grade === 'teilweise') c.box = Math.max(1, prevBox - 1);
-  else c.box = 1;
+  c.box = grade === 'richtig' ? (c.box === 0 ? 2 : Math.min(BOXES, c.box + 1)) : 1;
 
-  // Antwortsicherheit: gleitender Mittelwert. Die erste Antwort zählt
-  // vorsichtig, damit ein Zufallstreffer nicht gleich 100 % ergibt.
+  // Antwortsicherheit: gleitender Mittelwert der Richtigkeit. Die erste Antwort
+  // zählt vorsichtig, damit ein Zufallstreffer nicht gleich 100 % ergibt.
   c.confidence = c.seen === 0
     ? Math.round(score * 60)
     : Math.round(c.confidence * 0.6 + score * 100 * 0.4);
 
   c.seen += 1;
-  c[grade] += 1;
+  c[grade] = (c[grade] || 0) + 1;
   c.lastSeen = now;
   c.due = now + INTERVAL_DAYS[c.box] * DAY;
-  c.history.push(grade[0]); // r / t / f
+  c.history.push(grade[0]); // r / f
   if (c.history.length > 12) c.history.shift();
   return c;
 }
 
-export function recordAnswer(state, id, grade, now = Date.now()) {
+export function recordAnswer(state, id, grade, now = Date.now(), percent = null) {
   const before = getCard(state, id);
-  const after = applyGrade(before, grade, now);
+  const after = applyGrade(before, grade, now, percent);
   state.cards[id] = after;
   return { before, after };
 }
@@ -152,14 +148,14 @@ export function computeStats(questions, categories, state, now = Date.now()) {
       if (card.box >= 4) t.mastered += 1;
       if (card.due <= now) t.due += 1;
       t.answers += card.seen;
-      t.points += card.richtig + card.teilweise * 0.5;
+      t.points += card.richtig;
       t.confidenceSum += card.confidence;
     }
   }
 
   const finish = (t) => ({
     ...t,
-    // Anteil richtig beantworteter Versuche (teilweise = halb)
+    // Anteil richtig beantworteter Versuche
     correctRate: t.answers ? Math.round((t.points / t.answers) * 100) : null,
     // Durchschnittliche Sicherheit über alle Fragen des Gebiets (ungesehene = 0)
     confidence: t.total ? Math.round(t.confidenceSum / t.total) : 0,

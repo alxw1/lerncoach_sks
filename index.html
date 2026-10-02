@@ -50,6 +50,11 @@
         <h2 id="q-text" class="question"></h2>
         <div id="q-images" class="images"></div>
 
+        <div id="official" class="official" hidden>
+          <h3>Antwort laut ELWIS</h3>
+          <div id="official-answer"></div>
+        </div>
+
         <div id="answer-area">
           <p id="status" class="status" aria-live="polite"></p>
           <p id="transcript" class="transcript" aria-live="polite"></p>
@@ -65,15 +70,18 @@
 
         <div id="result" class="result" hidden>
           <p id="verdict" class="verdict"></p>
+          <div class="score" id="score">
+            <div class="score-label"><span>Richtigkeit</span><strong id="score-value"></strong></div>
+            <div class="score-bar" role="meter" aria-label="Richtigkeit der Antwort" aria-valuemin="0" aria-valuemax="100" id="score-bar">
+              <div class="score-fill" id="score-fill"></div>
+              <div class="score-mark" title="Bestehensgrenze 80 %"></div>
+            </div>
+            <small class="muted" id="score-source"></small>
+          </div>
           <p id="feedback"></p>
           <div id="hint" class="hint" hidden><strong>💡 Lernhilfe:</strong> <span></span></div>
-          <div class="official">
-            <h3>Antwort laut ELWIS</h3>
-            <div id="official-answer"></div>
-          </div>
           <div class="grade-buttons" role="group" aria-label="Bewertung">
             <button data-grade="richtig" class="grade g-richtig">✔ Richtig</button>
-            <button data-grade="teilweise" class="grade g-teilweise">◐ Teilweise</button>
             <button data-grade="falsch" class="grade g-falsch">✘ Falsch</button>
           </div>
           <p id="box-change" class="muted"></p>
@@ -128,10 +136,10 @@
       </fieldset>
 
       <fieldset>
-        <legend>Bewertung durch Claude (optional)</legend>
-        <p class="muted">Ohne Schlüssel bewertet die App per Stichwortabgleich und du bestätigst per Sprache. Mit Schlüssel bewertet Claude den Inhalt und erzeugt passende Eselsbrücken. Der Schlüssel bleibt nur in diesem Browser gespeichert.</p>
-        <label>Anthropic API-Schlüssel <input type="password" id="opt-key" autocomplete="off" placeholder="sk-ant-…"></label>
-        <label>Modell <input type="text" id="opt-model" placeholder="claude-opus-5-5"></label>
+        <legend>Bewertung durch OpenAI (optional)</legend>
+        <p class="muted">Mit Schlüssel bewertet die KI von OpenAI, wie viel Prozent deiner Antwort mit der ELWIS-Antwort übereinstimmen – <strong>mehr als 80 % gilt als richtig</strong>, sonst falsch – und liefert passende Eselsbrücken. Ohne Schlüssel (oder offline) schätzt die App die Richtigkeit per Stichwortabgleich und du bestätigst per Sprache. Der Schlüssel bleibt nur in diesem Browser gespeichert und geht direkt an api.openai.com.</p>
+        <label>OpenAI API-Schlüssel <input type="password" id="opt-key" autocomplete="off" placeholder="sk-…"></label>
+        <label>Modell <input type="text" id="opt-model" placeholder="gpt-5-mini"></label>
       </fieldset>
 
       <fieldset>

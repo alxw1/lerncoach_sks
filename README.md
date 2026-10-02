@@ -6,13 +6,15 @@ liest die **richtige Antwort laut ELWIS** vor und sortiert die Frage nach dem **
 
 Die App läuft komplett im Browser (Handy), braucht keinen Server und funktioniert nach dem ersten Laden auch offline.
 
+**▶ App öffnen: <https://alxw1.github.io/lerncoach_sks/>** – auf dem Handy öffnen und „Zum Startbildschirm hinzufügen“.
+
 ## So läuft eine Runde
 
 1. **Frage** – „Navigation, Frage 12. …“
 2. **Antwort** – du sprichst frei, der Coach wartet auf eine kurze Sprechpause.
-3. **Bewertung** – richtig / teilweise / falsch.
-4. **Lernhilfe** – bei Lücken eine Eselsbrücke.
-5. **ELWIS-Antwort** – die offizielle Musterantwort.
+3. **Bewertung** – Richtigkeit in Prozent als Statusbalken; **mehr als 80 % = richtig**, sonst falsch (kein „teilweise“).
+4. **ELWIS-Antwort** – die offizielle Musterantwort, direkt unter der Frage.
+5. **Lernhilfe** – bei falscher Antwort eine Eselsbrücke.
 6. **Leitner-Update** – „Aufgestiegen in Box 3.“
 
 Sprachbefehle jederzeit: **„nochmal“**, **„überspringen“**, **„weiß nicht“**, **„Statistik“**, **„Pause“**.
@@ -27,10 +29,10 @@ Sprachbefehle jederzeit: **„nochmal“**, **„überspringen“**, **„weiß 
 | 4 | nach 7 Tagen | sicher |
 | 5 | nach 14 Tagen | sehr sicher – kommt nur noch selten |
 
-- **richtig** → eine Box höher · **teilweise** → eine Box tiefer · **falsch** → zurück in Box 1
+- **richtig** (mehr als 80 %) → eine Box höher · **falsch** → zurück in Box 1
 - Fällige Fragen aus niedrigen Boxen werden stark bevorzugt (gewichteter Zufall); jede dritte Frage darf eine neue sein (Tageslimit einstellbar).
   Ist nichts fällig, kommen die Fragen mit der geringsten Sicherheit.
-- **Antwortsicherheit (%)** je Frage: gleitender Mittelwert der Bewertungen (richtig = 100, teilweise = 50, falsch = 0).
+- **Antwortsicherheit (%)** je Frage: gleitender Mittelwert der gemessenen Richtigkeit (in Prozent) der Antworten.
 - **Statistik je Schwerpunktgebiet** (Navigation, Schifffahrtsrecht, Wetterkunde, Seemannschaft I/II): Quote richtig, Ø Sicherheit,
   Abdeckung, Anzahl sicherer Fragen (Box 4–5), fällige Fragen, Box-Verteilung und die „Wackelkandidaten“.
 
@@ -39,11 +41,15 @@ Der Lernstand liegt im Browser (localStorage) und bleibt über alle Sitzungen er
 
 ## Bewertung der Antworten
 
-- **Ohne API-Schlüssel (Standard, offline):** Stichwortabgleich mit der ELWIS-Antwort. Der Coach nennt seine Einschätzung, liest die
-  Musterantwort vor und fragt: „richtig, teilweise oder falsch – oder okay für meine Einschätzung?“
-- **Mit Anthropic API-Schlüssel (optional):** Claude bewertet den Inhalt der transkribierten Antwort gegen die ELWIS-Musterantwort und
-  formuliert eine kurze, vorlesbare Rückmeldung samt Eselsbrücke. Schlägt der Aufruf fehl (z. B. Funkloch), greift automatisch der Stichwortabgleich.
-  Der Schlüssel wird nur lokal im Browser gespeichert und direkt an die Anthropic API gesendet.
+Jede Antwort bekommt eine **Richtigkeit in Prozent**, angezeigt als Statusbalken mit Markierung bei 80 %.
+**Mehr als 80 % gilt als richtig, alles andere als falsch.**
+
+- **Mit OpenAI-API-Schlüssel (empfohlen):** Die KI von OpenAI vergleicht die transkribierte Antwort inhaltlich mit der
+  ELWIS-Musterantwort (Inhalt, Vollständigkeit, Fachbegriffe – wie in der Prüfung) und liefert die Prozentzahl, eine kurze
+  vorlesbare Rückmeldung und eine Eselsbrücke. Schlüssel und Modell (Standard `gpt-5-mini`) unter *Einstellungen → Bewertung durch OpenAI*.
+  Der Schlüssel wird nur lokal im Browser gespeichert und direkt an `api.openai.com` gesendet.
+- **Ohne Schlüssel oder bei Funkloch:** Die App schätzt die Prozentzahl per Stichwortabgleich, liest die Musterantwort vor und
+  fragt: „richtig oder falsch – oder okay für meine Einschätzung?“
 
 Zusätzlich gibt es kuratierte Eselsbrücken (`src/hints.js`), fest zugeordnet zu 46 Katalogfragen – z. B. Nordrichtungen und
 Fehlweisung, Spring-/Nippzeit, manövrierunfähig vs. manövrierbehindert, Ausweichregeln, Mensch über Bord.
@@ -83,8 +89,8 @@ npm start            # http://localhost:8080
 npm test             # Unit-Tests (Leitner, Bewertung, Parser)
 ```
 
-Für das Handy die App per HTTPS bereitstellen (Mikrofon-Zugriff verlangt HTTPS), z. B. über **GitHub Pages**
-(*Settings → Pages → Branch: main, Ordner: / (root)*). Dann im Browser „Zum Startbildschirm hinzufügen“.
+Die App wird über **GitHub Pages** aus dem Branch `main` (Ordner `/`) veröffentlicht: <https://alxw1.github.io/lerncoach_sks/>.
+Jeder Merge nach `main` aktualisiert die Seite nach ein bis zwei Minuten. HTTPS ist nötig, weil der Browser sonst keinen Mikrofonzugriff erlaubt.
 
 Unterstützte Browser für den Autofahrt-Modus: **Chrome (Android)** und **Safari (iOS)** – beide bieten Spracherkennung auf Deutsch.
 
@@ -103,7 +109,7 @@ Keine rechtsverbindlichen Auskünfte zur Prüfungsordnung. Maßgeblich sind die 
 index.html, styles.css      Oberfläche
 src/app.js                  Ablauf (Frage → Antwort → Bewertung → Lernhilfe → ELWIS-Antwort → Leitner)
 src/leitner.js              Lernboxen, Fragenauswahl, Statistik (ohne DOM, getestet)
-src/grader.js               Stichwortabgleich + optionale Claude-Bewertung
+src/grader.js               Richtigkeit in Prozent: OpenAI-Bewertung oder Stichwortabgleich
 src/hints.js                kuratierte Eselsbrücken
 src/speech.js               Sprachausgabe/-erkennung, Sprachbefehle
 src/elwis-parser.js         ELWIS-HTML → Fragen (Browser und Node)
