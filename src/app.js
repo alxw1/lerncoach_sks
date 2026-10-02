@@ -4,6 +4,9 @@ import { findHint } from './hints.js';
 import { parseElwisPage, buildCatalog, CATEGORIES } from './elwis-parser.js';
 import * as speech from './speech.js';
 
+// Bei jeder Veröffentlichung anpassen (auch CACHE in sw.js) – wird unter „Lernen“ angezeigt.
+export const APP_VERSION = '2026-10-02 · Bewertung nur richtig/falsch';
+
 // ---------- Speicher ----------
 const KEYS = { state: 'sks.state', settings: 'sks.settings', catalog: 'sks.catalog' };
 const DEFAULT_SETTINGS = {
@@ -450,6 +453,11 @@ function esc(s) {
   return String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 }
 
+function renderVersion() {
+  const v = document.querySelector('#app-version');
+  if (v) v.textContent = `Version ${APP_VERSION}`;
+}
+
 function renderToday(message) {
   if (!catalog) return;
   const qs = activeQuestions({ forVoice: false });
@@ -651,11 +659,18 @@ async function init() {
   renderSettings();
 }
 
+renderVersion();
 bindTabs();
 bindLearn();
 bindSettings();
 init();
 
 if ('serviceWorker' in navigator && location.protocol === 'https:') {
-  navigator.serviceWorker.register('sw.js').catch(() => {});
+  // Ersetzt ein neuer Service Worker einen alten, einmal neu laden – so ist sofort die neue Version aktiv.
+  const hadController = !!navigator.serviceWorker.controller;
+  let reloaded = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (hadController && !reloaded && !session.mode) { reloaded = true; location.reload(); }
+  });
+  navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).then((reg) => reg.update()).catch(() => {});
 }
