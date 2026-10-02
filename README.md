@@ -1,10 +1,12 @@
-# ⚓ SKS-Lerncoach
+# SKS-Lerncoach
 
 Ein sprachgesteuerter Lerncoach für den **Sportküstenschifferschein (SKS)**. Er macht aus Autofahrten kurze Lerneinheiten im Dialog:
 Der Coach liest eine Frage aus dem **amtlichen ELWIS-Fragenkatalog** vor, hört deine Antwort, bewertet sie, gibt bei Bedarf eine Eselsbrücke,
 liest die **richtige Antwort laut ELWIS** vor und sortiert die Frage nach dem **Leitner-System** neu ein.
 
-Die App läuft komplett im Browser (Handy), braucht keinen Server und funktioniert nach dem ersten Laden auch offline.
+Die App läuft im Browser (Handy oder Mac), im Design von macOS, und funktioniert nach dem ersten Laden auch offline.
+Die Nutzung erfordert ein **Konto mit bestätigter E-Mail-Adresse**. Die Einstellungen sind nur für
+**admin@weislogel.com** zugänglich. Einrichtung des Anmeldedienstes: siehe **[SUPABASE_SETUP.md](SUPABASE_SETUP.md)**.
 
 **▶ App öffnen: <https://alxw1.github.io/lerncoach_sks/>** – auf dem Handy öffnen und „Zum Startbildschirm hinzufügen“.
 
@@ -39,16 +41,26 @@ Sprachbefehle jederzeit: **„nochmal“**, **„überspringen“**, **„weiß 
 Der Lernstand liegt im Browser (localStorage) und bleibt über alle Sitzungen erhalten. Für einen Gerätewechsel:
 *Einstellungen → Lernstand → Exportieren / Importieren*.
 
+## Konto und Sicherheit
+
+- **Registrierung** mit E-Mail und Passwort direkt auf der Startseite. Das Konto ist erst nach Klick auf den Link in der
+  **Bestätigungs-E-Mail** nutzbar. „Passwort vergessen“ schickt einen Link zum Neusetzen.
+- **Passwortrichtlinie** nach BSI-/NIST-Empfehlungen: mindestens 12 Zeichen, Klein- und Großbuchstaben, Ziffer und
+  Sonderzeichen, keine Teile der E-Mail-Adresse, keine bekannten Muster, nicht in bekannten Datenlecks (anonyme Prüfung per
+  k-Anonymität). Ein **Balken wird grün**, sobald alle Kriterien erfüllt sind; ein Sicherheitshinweis erklärt die Regeln.
+- **Einstellungen nur für admin@weislogel.com**, zusätzlich in der Datenbank per Row Level Security abgesichert.
+- **Lernstand** bleibt im Browser, getrennt je Konto.
+
 ## Bewertung der Antworten
 
 Jede Antwort bekommt eine **Richtigkeit in Prozent**, angezeigt als Statusbalken mit Markierung bei 80 %.
 **Mehr als 80 % gilt als richtig, alles andere als falsch.**
 
-- **Mit OpenAI-API-Schlüssel (empfohlen):** Die KI von OpenAI vergleicht die transkribierte Antwort inhaltlich mit der
-  ELWIS-Musterantwort (Inhalt, Vollständigkeit, Fachbegriffe – wie in der Prüfung) und liefert die Prozentzahl, eine kurze
-  vorlesbare Rückmeldung und eine Eselsbrücke. Schlüssel und Modell (Standard `gpt-5-mini`) unter *Einstellungen → Bewertung durch OpenAI*.
-  Der Schlüssel wird nur lokal im Browser gespeichert und direkt an `api.openai.com` gesendet.
-- **Ohne Schlüssel oder bei Funkloch:** Die App schätzt die Prozentzahl per Stichwortabgleich, liest die Musterantwort vor und
+- **KI-Bewertung (OpenAI) für alle angemeldeten Nutzer:** Die Server-Funktion `grade` vergleicht die transkribierte Antwort
+  inhaltlich mit der ELWIS-Musterantwort (Inhalt, Vollständigkeit, Fachbegriffe – wie in der Prüfung) und liefert die
+  Prozentzahl, eine kurze vorlesbare Rückmeldung und eine Eselsbrücke. Den OpenAI-Schlüssel hinterlegt der Admin unter
+  *Einstellungen → KI-Bewertung für alle Nutzer*; er liegt nur auf dem Server. Ein Tageslimit je Nutzer begrenzt die Kosten.
+- **Ohne KI (nicht eingerichtet, Limit erreicht oder Funkloch):** Die App schätzt die Prozentzahl per Stichwortabgleich, liest die Musterantwort vor und
   fragt: „richtig oder falsch – oder okay für meine Einschätzung?“
 
 Zusätzlich gibt es kuratierte Eselsbrücken (`src/hints.js`), fest zugeordnet zu 46 Katalogfragen – z. B. Nordrichtungen und
@@ -109,7 +121,13 @@ Keine rechtsverbindlichen Auskünfte zur Prüfungsordnung. Maßgeblich sind die 
 index.html, styles.css      Oberfläche
 src/app.js                  Ablauf (Frage → Antwort → Bewertung → Lernhilfe → ELWIS-Antwort → Leitner)
 src/leitner.js              Lernboxen, Fragenauswahl, Statistik (ohne DOM, getestet)
-src/grader.js               Richtigkeit in Prozent: OpenAI-Bewertung oder Stichwortabgleich
+src/grader.js               Richtigkeit in Prozent per Stichwortabgleich (Rückfall ohne KI)
+src/auth.js, src/ui-auth.js Anmeldung, Registrierung, E-Mail-Bestätigung, Passwort zurücksetzen (Supabase)
+src/password.js             Passwortrichtlinie und anonyme Datenleck-Prüfung
+src/config.js               Supabase-Projekt-URL und öffentlicher Schlüssel
+src/vendor/supabase.js      gebündeltes supabase-js (npm run vendor)
+supabase/schema.sql         Datenbank: Admin-Rolle, KI-Einstellungen, Tageslimit (Row Level Security)
+supabase/functions/grade/   Server-Funktion: KI-Bewertung mit dem OpenAI-Schlüssel des Admins
 src/hints.js                kuratierte Eselsbrücken
 src/speech.js               Sprachausgabe/-erkennung, Sprachbefehle
 src/elwis-parser.js         ELWIS-HTML → Fragen (Browser und Node)

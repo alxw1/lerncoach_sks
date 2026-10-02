@@ -5,167 +5,261 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>SKS-Lerncoach</title>
   <meta name="description" content="Sprachgesteuerter Lerncoach für den Sportküstenschifferschein – ELWIS-Fragenkatalog mit Leitner-System">
-  <meta name="theme-color" content="#0b3d5c">
+  <meta name="theme-color" content="#f5f5f7" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#1e1e1e" media="(prefers-color-scheme: dark)">
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="icons/icon.svg">
   <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-  <header class="topbar">
-    <h1>⚓ SKS-Lerncoach</h1>
-    <nav class="tabs" role="tablist">
-      <button role="tab" data-view="lernen" aria-selected="true">Lernen</button>
-      <button role="tab" data-view="statistik">Statistik</button>
-      <button role="tab" data-view="einstellungen">Einstellungen</button>
-    </nav>
-  </header>
+  <!-- ANMELDUNG -->
+  <div id="auth-screen" class="auth-screen" hidden>
+    <div class="auth-panel" role="dialog" aria-labelledby="auth-title">
+      <img src="icons/icon.svg" alt="" class="auth-icon" width="72" height="72">
+      <h1 id="auth-title">SKS-Lerncoach</h1>
+      <p class="auth-sub">Lernen für den Sportküstenschifferschein</p>
 
-  <main>
-    <!-- LERNEN -->
-    <section id="view-lernen" class="view">
-      <div id="no-catalog" class="notice" hidden>
-        <h2>Fragenkatalog fehlt</h2>
-        <p>Es ist noch kein ELWIS-Fragenkatalog geladen. Unter <strong>Einstellungen → Fragenkatalog</strong> kannst du
-          <code>fragen.json</code> oder die gespeicherten ELWIS-Seiten importieren. Alternativ im Projekt
-          <code>npm run import:elwis</code> ausführen.</p>
+      <div id="auth-setup" class="notice" hidden>
+        <strong>Anmeldedienst noch nicht eingerichtet.</strong>
+        Projekt-URL und öffentlichen Schlüssel von Supabase in <code>src/config.js</code> eintragen (siehe <code>SUPABASE_SETUP.md</code>).
       </div>
 
-      <div id="start-panel" class="start-panel">
-        <button id="btn-drive" class="btn-huge">🚗 Autofahrt starten</button>
-        <button id="btn-manual" class="btn-secondary">Am Bildschirm lernen</button>
-        <p id="today" class="muted"></p>
-        <p id="voice-warning" class="warning" hidden></p>
+      <div id="auth-tabs" class="segmented" role="tablist">
+        <button type="button" role="tab" data-auth="login" aria-selected="true">Anmelden</button>
+        <button type="button" role="tab" data-auth="register" aria-selected="false">Registrieren</button>
       </div>
 
-      <article id="card" class="card" hidden>
-        <div class="card-meta">
-          <span id="q-cat" class="chip"></span>
-          <span id="q-nr" class="chip"></span>
-          <span id="q-box" class="chip"></span>
-          <span id="q-conf" class="chip"></span>
-          <span id="q-reason" class="chip chip-soft"></span>
-        </div>
-        <h2 id="q-text" class="question"></h2>
-        <div id="q-images" class="images"></div>
+      <p id="auth-message" class="auth-message" role="status" aria-live="polite" hidden></p>
 
-        <div id="official" class="official" hidden>
-          <h3>Antwort laut ELWIS</h3>
-          <div id="official-answer"></div>
+      <!-- Anmelden -->
+      <form id="form-login" class="auth-form" data-auth-view="login" novalidate>
+        <div class="group">
+          <label class="field"><span>E-Mail</span><input type="email" id="login-email" autocomplete="username" required placeholder="name@beispiel.de"></label>
+          <label class="field"><span>Passwort</span><input type="password" id="login-password" autocomplete="current-password" required placeholder="Passwort"></label>
+        </div>
+        <button type="submit" class="btn-primary btn-wide">Anmelden</button>
+        <button type="button" class="btn-link" data-goto="reset">Passwort vergessen?</button>
+      </form>
+
+      <!-- Registrieren -->
+      <form id="form-register" class="auth-form" data-auth-view="register" novalidate hidden>
+        <div class="group">
+          <label class="field"><span>E-Mail</span><input type="email" id="reg-email" autocomplete="email" required placeholder="name@beispiel.de"></label>
+          <label class="field"><span>Passwort</span><input type="password" id="reg-password" autocomplete="new-password" required placeholder="Neues Passwort" aria-describedby="reg-meter-text"></label>
+          <label class="field"><span>Wiederholen</span><input type="password" id="reg-password2" autocomplete="new-password" required placeholder="Passwort wiederholen"></label>
+        </div>
+        <div class="pw-meter" data-meter="reg"></div>
+        <button type="submit" class="btn-primary btn-wide" id="btn-register" disabled>Konto erstellen</button>
+      </form>
+
+      <!-- Bestätigungs-Mail verschickt -->
+      <div id="view-verify" class="auth-form" data-auth-view="verify" hidden>
+        <div class="big-symbol" aria-hidden="true">✉️</div>
+        <h2>Bitte E-Mail bestätigen</h2>
+        <p>Wir haben einen Bestätigungslink an <strong id="verify-email"></strong> geschickt. Öffne den Link, um dein Konto zu aktivieren – danach kannst du dich anmelden.</p>
+        <p class="muted small">Keine E-Mail erhalten? Bitte auch im Spam-Ordner nachsehen.</p>
+        <button type="button" class="btn-secondary btn-wide" id="btn-resend">Bestätigungs-E-Mail erneut senden</button>
+        <button type="button" class="btn-link" data-goto="login">Zurück zur Anmeldung</button>
+      </div>
+
+      <!-- Passwort vergessen -->
+      <form id="form-reset" class="auth-form" data-auth-view="reset" novalidate hidden>
+        <p class="muted">Gib deine E-Mail-Adresse ein. Du bekommst einen Link, mit dem du ein neues Passwort festlegen kannst.</p>
+        <div class="group">
+          <label class="field"><span>E-Mail</span><input type="email" id="reset-email" autocomplete="email" required placeholder="name@beispiel.de"></label>
+        </div>
+        <button type="submit" class="btn-primary btn-wide">Link senden</button>
+        <button type="button" class="btn-link" data-goto="login">Zurück zur Anmeldung</button>
+      </form>
+
+      <!-- Neues Passwort (nach Link aus der E-Mail) -->
+      <form id="form-newpw" class="auth-form" data-auth-view="newpw" novalidate hidden>
+        <h2>Neues Passwort festlegen</h2>
+        <div class="group">
+          <label class="field"><span>Passwort</span><input type="password" id="new-password" autocomplete="new-password" required placeholder="Neues Passwort"></label>
+          <label class="field"><span>Wiederholen</span><input type="password" id="new-password2" autocomplete="new-password" required placeholder="Passwort wiederholen"></label>
+        </div>
+        <div class="pw-meter" data-meter="new"></div>
+        <button type="submit" class="btn-primary btn-wide" id="btn-newpw" disabled>Passwort speichern</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- APP -->
+  <div id="app" hidden>
+    <header class="toolbar">
+      <div class="toolbar-title"><img src="icons/icon.svg" alt="" width="22" height="22"> SKS-Lerncoach</div>
+      <nav class="segmented tabs" role="tablist" aria-label="Bereiche">
+        <button role="tab" data-view="lernen" aria-selected="true">Lernen</button>
+        <button role="tab" data-view="statistik" aria-selected="false">Statistik</button>
+        <button role="tab" data-view="einstellungen" aria-selected="false" id="tab-settings" hidden>Einstellungen</button>
+      </nav>
+      <div class="account">
+        <button type="button" id="btn-account" class="account-btn" aria-haspopup="true" aria-expanded="false" title="Konto">
+          <span id="account-initial" class="avatar" aria-hidden="true"></span>
+        </button>
+        <div id="account-menu" class="popover" role="menu" hidden>
+          <p class="popover-email" id="account-email"></p>
+          <p class="popover-role muted small" id="account-role"></p>
+          <hr>
+          <button type="button" role="menuitem" id="btn-logout" class="menu-item">Abmelden</button>
+        </div>
+      </div>
+    </header>
+
+    <main>
+      <!-- LERNEN -->
+      <section id="view-lernen" class="view">
+        <div id="no-catalog" class="notice" hidden>
+          <h2>Fragenkatalog fehlt</h2>
+          <p>Es ist noch kein ELWIS-Fragenkatalog geladen. Der Admin kann ihn unter <strong>Einstellungen → Fragenkatalog</strong> importieren.</p>
         </div>
 
-        <div id="answer-area">
-          <p id="status" class="status" aria-live="polite"></p>
-          <p id="transcript" class="transcript" aria-live="polite"></p>
-          <form id="answer-form" class="answer-form">
-            <textarea id="answer-input" rows="3" placeholder="Deine Antwort (oder 🎤 drücken)"></textarea>
-            <div class="row">
-              <button type="button" id="btn-mic" class="btn-secondary" title="Antwort diktieren">🎤</button>
-              <button type="submit" class="btn-primary">Antworten</button>
-              <button type="button" id="btn-dontknow" class="btn-secondary">Weiß nicht</button>
-            </div>
-          </form>
+        <div id="start-panel" class="start-panel">
+          <button id="btn-drive" class="btn-huge">🚗 Autofahrt starten</button>
+          <button id="btn-manual" class="btn-secondary btn-wide">Am Bildschirm lernen</button>
+          <p id="today" class="muted small center"></p>
+          <p id="voice-warning" class="warning small" hidden></p>
         </div>
 
-        <div id="result" class="result" hidden>
-          <p id="verdict" class="verdict"></p>
-          <div class="score" id="score">
-            <div class="score-label"><span>Richtigkeit</span><strong id="score-value"></strong></div>
-            <div class="score-bar" role="meter" aria-label="Richtigkeit der Antwort" aria-valuemin="0" aria-valuemax="100" id="score-bar">
-              <div class="score-fill" id="score-fill"></div>
-              <div class="score-mark" title="Bestehensgrenze 80 %"></div>
-            </div>
-            <small class="muted" id="score-source"></small>
+        <article id="card" class="card" hidden>
+          <div class="card-meta">
+            <span id="q-cat" class="chip"></span>
+            <span id="q-nr" class="chip"></span>
+            <span id="q-box" class="chip"></span>
+            <span id="q-conf" class="chip"></span>
+            <span id="q-reason" class="chip chip-soft"></span>
           </div>
-          <p id="feedback"></p>
-          <div id="hint" class="hint" hidden><strong>💡 Lernhilfe:</strong> <span></span></div>
-          <div class="grade-buttons" role="group" aria-label="Bewertung">
-            <button data-grade="richtig" class="grade g-richtig">✔ Richtig</button>
-            <button data-grade="falsch" class="grade g-falsch">✘ Falsch</button>
+          <h2 id="q-text" class="question"></h2>
+          <div id="q-images" class="images"></div>
+
+          <div id="official" class="official" hidden>
+            <h3>Antwort laut ELWIS</h3>
+            <div id="official-answer"></div>
           </div>
-          <p id="box-change" class="muted"></p>
+
+          <div id="answer-area">
+            <p id="status" class="status" aria-live="polite"></p>
+            <p id="transcript" class="transcript" aria-live="polite"></p>
+            <form id="answer-form" class="answer-form">
+              <textarea id="answer-input" rows="3" placeholder="Deine Antwort (oder 🎤 drücken)"></textarea>
+              <div class="row">
+                <button type="button" id="btn-mic" class="btn-secondary" title="Antwort diktieren">🎤</button>
+                <button type="button" id="btn-dontknow" class="btn-secondary">Weiß nicht</button>
+                <button type="submit" class="btn-primary push-right">Antworten</button>
+              </div>
+            </form>
+          </div>
+
+          <div id="result" class="result" hidden>
+            <p id="verdict" class="verdict"></p>
+            <div class="score" id="score">
+              <div class="score-label"><span>Richtigkeit</span><strong id="score-value"></strong></div>
+              <div class="score-bar" role="meter" aria-label="Richtigkeit der Antwort" aria-valuemin="0" aria-valuemax="100" id="score-bar">
+                <div class="score-fill" id="score-fill"></div>
+                <div class="score-mark" title="Bestehensgrenze 80 %"></div>
+              </div>
+              <small class="muted" id="score-source"></small>
+            </div>
+            <p id="feedback"></p>
+            <div id="hint" class="hint" hidden><strong>💡 Lernhilfe:</strong> <span></span></div>
+            <div class="grade-buttons" role="group" aria-label="Bewertung">
+              <button data-grade="richtig" class="grade g-richtig">✓ Richtig</button>
+              <button data-grade="falsch" class="grade g-falsch">✕ Falsch</button>
+            </div>
+            <p id="box-change" class="muted small"></p>
+          </div>
+
+          <div class="controls">
+            <button id="btn-repeat" class="btn-secondary">Wiederholen</button>
+            <button id="btn-skip" class="btn-secondary">Überspringen</button>
+            <button id="btn-stop" class="btn-secondary btn-destructive">Pause</button>
+            <button id="btn-next" class="btn-primary push-right" hidden>Weiter</button>
+          </div>
+        </article>
+
+        <p class="disclaimer">Fragen und Antworten: amtlicher Fragenkatalog SKS (ELWIS). Eselsbrücken sind Lernhilfen, keine amtlichen Antworten. Keine Rechtsauskunft zur Prüfungsordnung.<br><span id="app-version"></span></p>
+      </section>
+
+      <!-- STATISTIK -->
+      <section id="view-statistik" class="view" hidden>
+        <div id="stats-total" class="stats-total"></div>
+        <h3 class="section-title">Schwerpunktgebiete</h3>
+        <div class="group table-group">
+          <table class="stats-table">
+            <thead>
+              <tr><th>Gebiet</th><th>Fragen</th><th>Gesehen</th><th>Quote richtig</th><th>Sicherheit</th><th>Sicher (Box 4–5)</th><th>Fällig</th></tr>
+            </thead>
+            <tbody id="stats-body"></tbody>
+          </table>
+        </div>
+        <h3 class="section-title">Lernboxen</h3>
+        <div id="stats-boxes" class="boxes"></div>
+        <h3 class="section-title">Wackelkandidaten</h3>
+        <ol id="stats-weak" class="group weak-list"></ol>
+
+        <h3 class="section-title">Lernstand</h3>
+        <div class="group settings-group">
+          <div class="setting-row">
+            <div><strong>Lernstand sichern</strong><p class="muted small">Gespeichert in diesem Browser für dein Konto. Zum Gerätewechsel exportieren und dort importieren.</p></div>
+          </div>
+          <div class="setting-row row">
+            <button id="btn-export" class="btn-secondary">Exportieren</button>
+            <label class="btn-secondary file-btn">Importieren <input type="file" id="state-file" accept=".json" hidden></label>
+            <button id="btn-reset" class="btn-secondary btn-destructive push-right">Zurücksetzen</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- EINSTELLUNGEN (nur Admin) -->
+      <section id="view-einstellungen" class="view" hidden>
+        <h3 class="section-title">KI-Bewertung für alle Nutzer</h3>
+        <div class="group settings-group">
+          <p class="setting-note muted small">Die KI von OpenAI bewertet, wie viel Prozent einer Antwort mit der ELWIS-Antwort übereinstimmen – <strong>mehr als 80 % gilt als richtig</strong>, sonst falsch. Der Schlüssel wird auf dem Server gespeichert und ist für niemanden auslesbar; alle angemeldeten Nutzer werden damit bewertet.</p>
+          <label class="setting-row"><span>OpenAI API-Schlüssel</span><input type="password" id="opt-key" autocomplete="off" placeholder="sk-…"></label>
+          <p class="setting-note muted small" id="key-status"></p>
+          <label class="setting-row"><span>Modell</span><input type="text" id="opt-model" placeholder="gpt-5-mini"></label>
+          <label class="setting-row"><span>KI-Bewertungen pro Nutzer und Tag</span><input type="number" id="opt-limit" min="0" max="10000" step="1"></label>
+          <div class="setting-row row">
+            <button type="button" id="btn-save-ai" class="btn-primary">Speichern</button>
+            <button type="button" id="btn-test-key" class="btn-secondary">Verbindung testen</button>
+          </div>
+          <div id="key-test-result" class="key-test" role="status" aria-live="polite" hidden></div>
         </div>
 
-        <div class="controls">
-          <button id="btn-repeat" class="btn-secondary">🔁 Wiederholen</button>
-          <button id="btn-skip" class="btn-secondary">⏭ Überspringen</button>
-          <button id="btn-next" class="btn-primary" hidden>Weiter ▶</button>
-          <button id="btn-stop" class="btn-danger">⏸ Pause</button>
+        <h3 class="section-title">Schwerpunktgebiete</h3>
+        <div class="group settings-group">
+          <div id="cat-filter" class="checks"></div>
+          <label class="setting-row switch-row"><span>Im Auto nur Fragen ohne Abbildung</span><input type="checkbox" class="switch" id="opt-audio-only"></label>
         </div>
-      </article>
 
-      <p class="disclaimer">Fragen und Antworten: amtlicher Fragenkatalog SKS (ELWIS). Eselsbrücken sind Lernhilfen, keine amtlichen Antworten. Keine Rechtsauskunft zur Prüfungsordnung.<br><span id="app-version"></span></p>
-    </section>
-
-    <!-- STATISTIK -->
-    <section id="view-statistik" class="view" hidden>
-      <div id="stats-total" class="stats-total"></div>
-      <table class="stats-table">
-        <thead>
-          <tr><th>Gebiet</th><th>Fragen</th><th>Gesehen</th><th>Quote richtig</th><th>Sicherheit</th><th>Sicher (Box 4–5)</th><th>Fällig</th></tr>
-        </thead>
-        <tbody id="stats-body"></tbody>
-      </table>
-      <h3>Lernboxen</h3>
-      <div id="stats-boxes" class="boxes"></div>
-      <h3>Wackelkandidaten</h3>
-      <ol id="stats-weak" class="weak-list"></ol>
-    </section>
-
-    <!-- EINSTELLUNGEN -->
-    <section id="view-einstellungen" class="view" hidden>
-      <fieldset>
-        <legend>Schwerpunktgebiete</legend>
-        <div id="cat-filter" class="checks"></div>
-        <label class="check"><input type="checkbox" id="opt-audio-only"> Im Auto nur Fragen ohne Abbildung</label>
-      </fieldset>
-
-      <fieldset>
-        <legend>Lernrhythmus</legend>
-        <label>Neue Fragen pro Tag <input type="number" id="opt-new" min="0" max="100" step="1"></label>
-        <label>Zwischenstand vorlesen alle <input type="number" id="opt-report" min="0" max="50" step="1"> Fragen</label>
-      </fieldset>
-
-      <fieldset>
-        <legend>Sprache</legend>
-        <label>Stimme <select id="opt-voice"></select></label>
-        <label>Sprechtempo <input type="range" id="opt-rate" min="0.7" max="1.4" step="0.05"> <span id="opt-rate-val"></span></label>
-        <label>Denkpause nach dem Sprechen (Sek.) <input type="number" id="opt-silence" min="1" max="6" step="0.5"></label>
-        <button id="btn-test-voice" class="btn-secondary">Stimme testen</button>
-      </fieldset>
-
-      <fieldset>
-        <legend>Bewertung durch OpenAI (optional)</legend>
-        <p class="muted">Mit Schlüssel bewertet die KI von OpenAI, wie viel Prozent deiner Antwort mit der ELWIS-Antwort übereinstimmen – <strong>mehr als 80 % gilt als richtig</strong>, sonst falsch – und liefert passende Eselsbrücken. Ohne Schlüssel (oder offline) schätzt die App die Richtigkeit per Stichwortabgleich und du bestätigst per Sprache. Der Schlüssel bleibt nur in diesem Browser gespeichert und geht direkt an api.openai.com.</p>
-        <label>OpenAI API-Schlüssel <input type="password" id="opt-key" autocomplete="off" placeholder="sk-…"></label>
-        <label>Modell <input type="text" id="opt-model" placeholder="gpt-5-mini"></label>
-        <div class="row">
-          <button type="button" id="btn-test-key" class="btn-secondary">🔌 Verbindung testen</button>
+        <h3 class="section-title">Lernrhythmus</h3>
+        <div class="group settings-group">
+          <label class="setting-row"><span>Neue Fragen pro Tag</span><input type="number" id="opt-new" min="0" max="100" step="1"></label>
+          <label class="setting-row"><span>Zwischenstand vorlesen alle … Fragen</span><input type="number" id="opt-report" min="0" max="50" step="1"></label>
         </div>
-        <div id="key-test-result" class="key-test" role="status" aria-live="polite" hidden></div>
-      </fieldset>
 
-      <fieldset>
-        <legend>Fragenkatalog</legend>
-        <p id="catalog-info" class="muted"></p>
-        <label>Importieren: <code>fragen.json</code> oder gespeicherte ELWIS-HTML-Seiten
-          <input type="file" id="catalog-file" accept=".json,.html,.htm" multiple></label>
-        <button id="btn-catalog-reset" class="btn-secondary">Mitgelieferten Katalog verwenden</button>
-        <pre id="import-log" class="log" hidden></pre>
-      </fieldset>
-
-      <fieldset>
-        <legend>Lernstand</legend>
-        <p class="muted">Der Lernstand wird im Browser gespeichert. Zum Gerätewechsel exportieren und dort importieren.</p>
-        <div class="row">
-          <button id="btn-export" class="btn-secondary">Exportieren</button>
-          <label class="btn-secondary file-btn">Importieren <input type="file" id="state-file" accept=".json" hidden></label>
-          <button id="btn-reset" class="btn-danger">Zurücksetzen</button>
+        <h3 class="section-title">Sprache</h3>
+        <div class="group settings-group">
+          <label class="setting-row"><span>Stimme</span><select id="opt-voice"></select></label>
+          <label class="setting-row"><span>Sprechtempo <span id="opt-rate-val" class="muted"></span></span><input type="range" id="opt-rate" min="0.7" max="1.4" step="0.05"></label>
+          <label class="setting-row"><span>Denkpause nach dem Sprechen (Sek.)</span><input type="number" id="opt-silence" min="1" max="6" step="0.5"></label>
+          <div class="setting-row row"><button id="btn-test-voice" class="btn-secondary">Stimme testen</button></div>
         </div>
-      </fieldset>
-    </section>
-  </main>
+
+        <h3 class="section-title">Fragenkatalog</h3>
+        <div class="group settings-group">
+          <p class="setting-note muted small" id="catalog-info"></p>
+          <label class="setting-row"><span>Importieren: <code>fragen.json</code> oder ELWIS-Seiten</span><input type="file" id="catalog-file" accept=".json,.html,.htm" multiple></label>
+          <div class="setting-row row"><button id="btn-catalog-reset" class="btn-secondary">Mitgelieferten Katalog verwenden</button></div>
+          <pre id="import-log" class="log" hidden></pre>
+        </div>
+      </section>
+    </main>
+  </div>
 
   <script type="module" src="src/app.js"></script>
 </body>
