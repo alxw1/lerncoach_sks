@@ -1,7 +1,7 @@
 // Offline-Unterstützung: erst Netz, bei Funkloch aus dem Cache.
 // Netzabrufe umgehen den Browser-Cache (GitHub Pages cacht sonst bis zu 10 Minuten),
 // damit eine neue Version sofort ankommt.
-const CACHE = 'sks-lerncoach-v4';
+const CACHE = 'sks-lerncoach-v5';
 const SHELL = ['./', 'index.html', 'styles.css', 'manifest.webmanifest', 'icons/icon.svg',
   'src/app.js', 'src/leitner.js', 'src/grader.js', 'src/hints.js', 'src/speech.js', 'src/elwis-parser.js', 'data/fragen.json'];
 

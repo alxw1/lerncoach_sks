@@ -140,6 +140,10 @@
         <p class="muted">Mit Schlüssel bewertet die KI von OpenAI, wie viel Prozent deiner Antwort mit der ELWIS-Antwort übereinstimmen – <strong>mehr als 80 % gilt als richtig</strong>, sonst falsch – und liefert passende Eselsbrücken. Ohne Schlüssel (oder offline) schätzt die App die Richtigkeit per Stichwortabgleich und du bestätigst per Sprache. Der Schlüssel bleibt nur in diesem Browser gespeichert und geht direkt an api.openai.com.</p>
         <label>OpenAI API-Schlüssel <input type="password" id="opt-key" autocomplete="off" placeholder="sk-…"></label>
         <label>Modell <input type="text" id="opt-model" placeholder="gpt-5-mini"></label>
+        <div class="row">
+          <button type="button" id="btn-test-key" class="btn-secondary">🔌 Verbindung testen</button>
+        </div>
+        <div id="key-test-result" class="key-test" role="status" aria-live="polite" hidden></div>
       </fieldset>
 
       <fieldset>

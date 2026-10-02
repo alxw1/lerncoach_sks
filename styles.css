@@ -159,3 +159,10 @@ code { background: var(--soft); padding: 1px 5px; border-radius: 4px; }
 .score-bar[data-pass="true"] .score-fill { background: var(--ok); }
 .score-mark { position: absolute; top: 0; bottom: 0; left: 80%; width: 2px; background: var(--text); opacity: .55; }
 .official { border-left: 4px solid var(--primary); }
+
+/* Ergebnis des OpenAI-Verbindungstests */
+.key-test { padding: 10px 12px; border-radius: 10px; background: var(--soft); line-height: 1.45; }
+.key-test.ok { background: color-mix(in srgb, var(--ok) 16%, transparent); border-left: 4px solid var(--ok); }
+.key-test.warn { background: color-mix(in srgb, var(--mid) 16%, transparent); border-left: 4px solid var(--mid); }
+.key-test.fail { background: color-mix(in srgb, var(--bad) 14%, transparent); border-left: 4px solid var(--bad); }
+.key-test small { color: var(--muted); word-break: break-word; }

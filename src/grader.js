@@ -120,7 +120,9 @@ export async function openaiGrade({ question, officialAnswer, userAnswer, settin
   if (!res.ok) {
     let detail = '';
     try { detail = (await res.json()).error?.message || ''; } catch { /* kein JSON */ }
-    throw new Error(`OpenAI ${res.status}${detail ? `: ${detail}` : ''}`);
+    const err = new Error(`OpenAI ${res.status}${detail ? `: ${detail}` : ''}`);
+    err.status = res.status;
+    throw err;
   }
   const data = await res.json();
   const msg = data.choices?.[0]?.message;
@@ -134,5 +136,20 @@ export async function openaiGrade({ question, officialAnswer, userAnswer, settin
     feedback: out.rueckmeldung,
     hint: out.lernhilfe || null,
     source: 'openai',
+    model: data.model || model,
   };
+}
+
+/** Verständliche Erklärung für Fehler beim OpenAI-Aufruf (für den Verbindungstest). */
+export function explainOpenAIError(e) {
+  if (e.name === 'TimeoutError') return 'Zeitüberschreitung – OpenAI hat nicht innerhalb von 30 Sekunden geantwortet.';
+  if (e instanceof TypeError) return 'Keine Verbindung zu api.openai.com – Internetverbindung prüfen.';
+  switch (e.status) {
+    case 401: return 'API-Schlüssel ungültig oder gelöscht – Schlüssel auf platform.openai.com prüfen.';
+    case 403: return 'Kein Zugriff – Schlüssel oder Projekt hat keine Berechtigung für dieses Modell.';
+    case 404: return 'Modell nicht gefunden oder für diesen Schlüssel nicht freigeschaltet – anderes Modell eintragen.';
+    case 429: return 'Kein Guthaben oder Limit erreicht – unter Billing Guthaben aufladen bzw. Limit prüfen.';
+    case 400: return 'Anfrage abgelehnt – das Modell unterstützt diese Art der Anfrage evtl. nicht.';
+    default: return e.status >= 500 ? 'OpenAI hat gerade ein Problem – später erneut versuchen.' : 'Unbekannter Fehler.';
+  }
 }
