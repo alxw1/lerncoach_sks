@@ -1,13 +1,16 @@
 import { emptyState, getCard, recordAnswer, pickNext, computeStats } from './leitner.js';
-import { localGrade, openaiGrade, explainOpenAIError, DEFAULT_OPENAI_MODEL, PASS_PERCENT } from './grader.js';
+import { localGrade, PASS_PERCENT } from './grader.js';
+import * as auth from './auth.js';
+import { initAuth } from './ui-auth.js';
 import { findHint } from './hints.js';
 import { parseElwisPage, buildCatalog, CATEGORIES } from './elwis-parser.js';
 import * as speech from './speech.js';
 
 // Bei jeder Veröffentlichung anpassen (auch CACHE in sw.js) – wird unter „Lernen“ angezeigt.
-export const APP_VERSION = '2026-10-02b · API-Test in den Einstellungen';
+export const APP_VERSION = '2026-10-03 · Anmeldung & macOS-Design';
 
 // ---------- Speicher ----------
+// Lernstand je Konto (sks.state.<user-id>), Einstellungen und Katalog je Gerät
 const KEYS = { state: 'sks.state', settings: 'sks.settings', catalog: 'sks.catalog' };
 const DEFAULT_SETTINGS = {
   categories: null, // null = alle
@@ -17,8 +20,6 @@ const DEFAULT_SETTINGS = {
   voice: '',
   rate: 1.0,
   silence: 2.2,
-  apiKey: '',
-  model: DEFAULT_OPENAI_MODEL,
 };
 
 function load(key, fallback) {
@@ -31,15 +32,33 @@ function save(key, value) {
   try { localStorage.setItem(key, JSON.stringify(value)); } catch (e) { console.warn('Speichern fehlgeschlagen', e); }
 }
 
-let state = load(KEYS.state, null) || emptyState();
+let user = null; // angemeldetes Supabase-Konto
+let state = emptyState();
 let settings = { ...DEFAULT_SETTINGS, ...load(KEYS.settings, {}) };
-// Umstieg von der früheren Claude-Bewertung: Modell und Anthropic-Schlüssel passen nicht zu OpenAI
-if (/^claude/.test(settings.model)) settings.model = DEFAULT_OPENAI_MODEL;
-if (/^sk-ant-/.test(settings.apiKey)) settings.apiKey = '';
+// Früher lagen API-Schlüssel im Browser – heute liegt der Schlüssel nur noch auf dem Server.
+if ('apiKey' in settings || 'model' in settings) {
+  delete settings.apiKey;
+  delete settings.model;
+  save(KEYS.settings, settings);
+}
 let catalog = null;
 
-const saveState = () => save(KEYS.state, state);
+const stateKey = () => `${KEYS.state}.${user.id}`;
+const saveState = () => { if (user) save(stateKey(), state); };
 const saveSettings = () => save(KEYS.settings, settings);
+
+/** Lernstand des Kontos laden; ein älterer Lernstand ohne Konto wird beim ersten Login übernommen. */
+function loadUserState() {
+  const own = load(stateKey(), null);
+  const legacy = load(KEYS.state, null);
+  if (own) return own;
+  if (legacy) {
+    save(stateKey(), legacy);
+    localStorage.removeItem(KEYS.state);
+    return legacy;
+  }
+  return emptyState();
+}
 
 // ---------- DOM ----------
 const $ = (sel) => document.querySelector(sel);
@@ -273,13 +292,13 @@ async function round(q, reason, gen) {
   let evaluation;
   if (dontKnow) {
     evaluation = { grade: 'falsch', feedback: 'Kein Problem – genau dafür üben wir.', source: 'weissnicht' };
-  } else if (settings.apiKey && userAnswer.trim()) {
+  } else if (user && userAnswer.trim() && navigator.onLine !== false) {
     setStatus('⏳ KI bewertet …');
     try {
-      evaluation = await openaiGrade({ question: q.question, officialAnswer: q.answer, userAnswer, settings });
+      evaluation = await auth.serverGrade({ question: q.question, officialAnswer: q.answer, userAnswer });
     } catch (e) {
-      console.warn('OpenAI-Bewertung fehlgeschlagen, nutze Stichwortabgleich', e);
-      evaluation = { ...localGrade(userAnswer, q.answer), error: e.message };
+      console.warn('KI-Bewertung nicht möglich, nutze Stichwortabgleich', e);
+      evaluation = { ...localGrade(userAnswer, q.answer), error: explainGradeError(e) };
     }
     guard(gen);
     setStatus('');
@@ -381,7 +400,7 @@ function showScore(ev) {
   el.scoreBar.setAttribute('aria-valuenow', String(pct));
   el.scoreSource.textContent = {
     openai: `Bewertung durch KI (OpenAI) · richtig ab mehr als ${PASS_PERCENT} %`,
-    lokal: `Schätzung per Stichwortabgleich${ev.error ? ` (KI nicht erreichbar: ${ev.error})` : ''} · richtig ab mehr als ${PASS_PERCENT} %`,
+    lokal: `Schätzung per Stichwortabgleich${ev.error ? ` – ${ev.error}` : ''} · richtig ab mehr als ${PASS_PERCENT} %`,
     weissnicht: 'Keine Antwort gegeben',
     leer: 'Keine Antwort erkannt',
   }[ev.source] || '';
@@ -478,7 +497,7 @@ function renderSettings() {
   box.innerHTML = cats.map((c) => {
     const n = catalog ? catalog.questions.filter((q) => q.category === c.id).length : 0;
     const checked = !settings.categories || settings.categories.includes(c.id);
-    return `<label class="check"><input type="checkbox" value="${c.id}" ${checked ? 'checked' : ''}> ${esc(c.name)} <span class="muted">(${n})</span></label>`;
+    return `<label><span>${esc(c.name)} <span class="muted">(${n})</span></span><input type="checkbox" value="${c.id}" ${checked ? 'checked' : ''}></label>`;
   }).join('');
   $('#opt-audio-only').checked = settings.audioOnly;
   $('#opt-new').value = settings.newPerDay;
@@ -486,8 +505,6 @@ function renderSettings() {
   $('#opt-rate').value = settings.rate;
   $('#opt-rate-val').textContent = `${settings.rate.toFixed(2)}×`;
   $('#opt-silence').value = settings.silence;
-  $('#opt-key').value = settings.apiKey;
-  $('#opt-model').value = settings.model;
   renderVoices();
   const info = catalog
     ? `${catalog.questions.length} Fragen · Quelle: ${catalog.source}${catalog.retrieved ? `, Stand ${catalog.retrieved}` : ''}${load(KEYS.catalog, null) ? ' (importiert)' : ''}`
@@ -525,15 +542,14 @@ function bindSettings() {
   });
   $('#opt-voice').addEventListener('change', (e) => { settings.voice = e.target.value; speech.chooseVoice(settings.voice); saveSettings(); });
   $('#btn-test-voice').addEventListener('click', () => speech.speak('Steuerbord ist rechts, Backbord ist links. Gute Fahrt!'));
-  $('#opt-key').addEventListener('change', (e) => { settings.apiKey = e.target.value.trim(); saveSettings(); });
-  $('#opt-model').addEventListener('change', (e) => { settings.model = e.target.value.trim() || DEFAULT_SETTINGS.model; saveSettings(); });
+  $('#btn-save-ai').addEventListener('click', () => saveAiSettings());
   $('#btn-test-key').addEventListener('click', testOpenAI);
   window.speechSynthesis?.addEventListener?.('voiceschanged', renderVoices);
 
   $('#catalog-file').addEventListener('change', (e) => importCatalogFiles([...e.target.files]));
   $('#btn-catalog-reset').addEventListener('click', async () => {
     localStorage.removeItem(KEYS.catalog);
-    await init();
+    await refreshCatalog();
   });
 
   $('#btn-export').addEventListener('click', () => {
@@ -563,38 +579,94 @@ function bindSettings() {
   });
 }
 
-/** Prüft Schlüssel und Modell mit einer echten Testbewertung (Frage NAV-1 mit der ELWIS-Antwort als Antwort). */
+/** Erklärt, warum die KI-Bewertung nicht ging (wird unter dem Balken bzw. im Verbindungstest angezeigt). */
+function explainGradeError(e) {
+  switch (e.code) {
+    case 'limit': return e.message || 'Tageslimit für KI-Bewertungen erreicht.';
+    case 'not_configured': return 'KI-Bewertung ist noch nicht eingerichtet (Admin: Einstellungen).';
+    case 'unauthorized': return 'Anmeldung abgelaufen – bitte neu anmelden.';
+    case 'email_not_confirmed': return 'E-Mail-Adresse noch nicht bestätigt.';
+    case 'forbidden': return 'Nur für den Admin.';
+    case 'openai_unreachable': return 'OpenAI ist gerade nicht erreichbar.';
+    case 'openai_error':
+      switch (e.status) {
+        case 401: return 'OpenAI-Schlüssel ungültig oder gelöscht – Schlüssel auf platform.openai.com prüfen.';
+        case 403: return 'Der OpenAI-Schlüssel hat keine Berechtigung für dieses Modell.';
+        case 404: return 'Modell nicht gefunden oder für den Schlüssel nicht freigeschaltet – anderes Modell eintragen.';
+        case 429: return 'Kein OpenAI-Guthaben oder Limit erreicht – unter Billing aufladen bzw. Limit prüfen.';
+        case 400: return 'OpenAI hat die Anfrage abgelehnt – das Modell unterstützt sie evtl. nicht.';
+        default: return 'OpenAI hat einen Fehler gemeldet.';
+      }
+    default:
+      return /fetch|network|Failed/i.test(e.message || '') ? 'Keine Verbindung zum Server.' : (e.message || 'Unbekannter Fehler.');
+  }
+}
+
+/** Admin: KI-Einstellungen vom Server laden und anzeigen. */
+async function renderAiSettings() {
+  const status = $('#key-status');
+  try {
+    const cfg = await auth.loadAiConfig();
+    $('#opt-model').value = cfg.openai_model || '';
+    $('#opt-limit').value = cfg.daily_limit;
+    status.textContent = cfg.key_hint
+      ? `Hinterlegt: ${cfg.key_hint} · zuletzt geändert ${new Date(cfg.updated_at).toLocaleString('de-DE')}. Feld leer lassen, um ihn zu behalten.`
+      : 'Noch kein Schlüssel hinterlegt – bis dahin wird per Stichwortabgleich bewertet.';
+  } catch (e) {
+    status.textContent = `Einstellungen konnten nicht geladen werden: ${auth.explainAuthError(e)}`;
+  }
+}
+
+async function saveAiSettings({ quiet = false } = {}) {
+  const box = $('#key-test-result');
+  const apiKey = $('#opt-key').value.trim();
+  if (apiKey && !/^sk-/.test(apiKey)) {
+    box.hidden = false;
+    box.className = 'key-test fail';
+    box.textContent = 'Das sieht nicht nach einem OpenAI-Schlüssel aus – er beginnt mit „sk-“.';
+    return false;
+  }
+  try {
+    await auth.saveAiConfig({
+      apiKey,
+      model: $('#opt-model').value.trim() || 'gpt-5-mini',
+      dailyLimit: Math.max(0, Math.round(Number($('#opt-limit').value) || 0)),
+    });
+    $('#opt-key').value = '';
+    await renderAiSettings();
+    if (!quiet) {
+      box.hidden = false;
+      box.className = 'key-test ok';
+      box.textContent = '✓ Gespeichert.';
+    }
+    return true;
+  } catch (e) {
+    box.hidden = false;
+    box.className = 'key-test fail';
+    box.textContent = `Speichern fehlgeschlagen: ${auth.explainAuthError(e)}`;
+    return false;
+  }
+}
+
+/** Admin: Testbewertung über die Server-Funktion (Frage NAV-1 mit der ELWIS-Antwort als Antwort). */
 async function testOpenAI() {
-  // Eingaben übernehmen, auch wenn das Feld noch nicht verlassen wurde
-  settings.apiKey = $('#opt-key').value.trim();
-  settings.model = $('#opt-model').value.trim() || DEFAULT_SETTINGS.model;
-  saveSettings();
   const box = $('#key-test-result');
   const btn = $('#btn-test-key');
+  // Ungespeicherte Eingaben zuerst sichern, damit genau diese getestet werden
+  if ($('#opt-key').value.trim() && !(await saveAiSettings({ quiet: true }))) return;
+  const q = catalog?.questions?.find((x) => x.id === 'NAV-1') || { question: 'Was ist Wind?', answer: 'Bewegte Luft.' };
+  btn.disabled = true;
   box.hidden = false;
   box.className = 'key-test';
-  if (!settings.apiKey) {
-    box.classList.add('fail');
-    box.textContent = 'Bitte zuerst einen API-Schlüssel eintragen.';
-    return;
-  }
-  if (!/^sk-/.test(settings.apiKey)) {
-    box.classList.add('fail');
-    box.textContent = 'Das sieht nicht nach einem OpenAI-Schlüssel aus – er beginnt mit „sk-“.';
-    return;
-  }
-  const q = catalog?.questions?.find((x) => x.id === 'NAV-1')
-    || { question: 'Was ist Wind?', answer: 'Bewegte Luft.' };
-  btn.disabled = true;
-  box.textContent = `⏳ Teste ${settings.model} …`;
+  box.textContent = '⏳ Teste die KI-Bewertung über den Server …';
   const start = performance.now();
   try {
-    const r = await openaiGrade({ question: q.question, officialAnswer: q.answer, userAnswer: q.answer, settings });
+    const r = await auth.serverGrade({ question: q.question, officialAnswer: q.answer, userAnswer: q.answer, test: true });
     const secs = ((performance.now() - start) / 1000).toFixed(1).replace('.', ',');
     const plausible = r.grade === 'richtig';
     box.classList.add(plausible ? 'ok' : 'warn');
     box.replaceChildren(
-      Object.assign(document.createElement('strong'), { textContent: '✔ Verbindung funktioniert' }),
+      Object.assign(document.createElement('strong'), { textContent: '✓ Verbindung funktioniert' }),
       document.createElement('br'),
       `Modell ${r.model} · Antwortzeit ${secs} s`,
       document.createElement('br'),
@@ -604,9 +676,9 @@ async function testOpenAI() {
   } catch (e) {
     box.classList.add('fail');
     box.replaceChildren(
-      Object.assign(document.createElement('strong'), { textContent: '✘ Test fehlgeschlagen' }),
+      Object.assign(document.createElement('strong'), { textContent: '✕ Test fehlgeschlagen' }),
       document.createElement('br'),
-      explainOpenAIError(e),
+      explainGradeError(e),
       document.createElement('br'),
       Object.assign(document.createElement('small'), { textContent: `Details: ${e.message}` }),
     );
@@ -641,7 +713,7 @@ async function importCatalogFiles(files) {
     save(KEYS.catalog, result);
     lines.push('✔ Katalog übernommen.');
     log.textContent = lines.join('\n');
-    await init();
+    await refreshCatalog();
   } catch (e) {
     lines.push(`✘ ${e.message}`);
     log.textContent = lines.join('\n');
@@ -686,34 +758,73 @@ function bindLearn() {
   });
 }
 
+function showView(name) {
+  // Einstellungen nur für den Admin (zusätzlich serverseitig per Row Level Security geschützt)
+  if (name === 'einstellungen' && !auth.isAdmin(user)) name = 'lernen';
+  for (const t of document.querySelectorAll('.tabs [role="tab"]')) t.setAttribute('aria-selected', String(t.dataset.view === name));
+  for (const v of document.querySelectorAll('.view')) v.hidden = v.id !== `view-${name}`;
+  if (name === 'statistik') renderStats();
+  if (name === 'einstellungen') { renderSettings(); renderAiSettings(); }
+}
+
 function bindTabs() {
-  for (const tab of document.querySelectorAll('[role="tab"]')) {
-    tab.addEventListener('click', () => {
-      for (const t of document.querySelectorAll('[role="tab"]')) t.setAttribute('aria-selected', String(t === tab));
-      for (const v of document.querySelectorAll('.view')) v.hidden = v.id !== `view-${tab.dataset.view}`;
-      if (tab.dataset.view === 'statistik') renderStats();
-      if (tab.dataset.view === 'einstellungen') renderSettings();
-    });
-  }
+  for (const tab of document.querySelectorAll('.tabs [role="tab"]')) tab.addEventListener('click', () => showView(tab.dataset.view));
+}
+
+function bindAccount() {
+  const btn = $('#btn-account');
+  const menu = $('#account-menu');
+  const toggle = (open) => { menu.hidden = !open; btn.setAttribute('aria-expanded', String(open)); };
+  btn.addEventListener('click', (e) => { e.stopPropagation(); toggle(menu.hidden); });
+  document.addEventListener('click', (e) => { if (!menu.hidden && !menu.contains(e.target)) toggle(false); });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') toggle(false); });
+  $('#btn-logout').addEventListener('click', async () => { toggle(false); await auth.signOut(); });
+}
+
+function onSignedIn(u) {
+  user = u;
+  state = loadUserState();
+  const admin = auth.isAdmin(u);
+  $('#app').hidden = false;
+  $('#tab-settings').hidden = !admin;
+  $('#account-initial').textContent = (u.email || '?')[0].toUpperCase();
+  $('#account-email').textContent = u.email;
+  $('#account-role').textContent = admin ? 'Administrator' : 'Lernende/r';
+  showView('lernen');
+  renderToday();
+}
+
+function onSignedOut() {
+  if (session.mode) stopSession();
+  user = null;
+  state = emptyState();
+  $('#app').hidden = true;
+  $('#tab-settings').hidden = true;
+}
+
+async function refreshCatalog() {
+  catalog = await loadCatalog();
+  el.noCatalog.hidden = !!catalog;
+  el.startPanel.hidden = !catalog;
+  renderToday();
+  if (auth.isAdmin(user)) renderSettings();
 }
 
 async function init() {
-  catalog = await loadCatalog();
+  await refreshCatalog();
   speech.setRate(settings.rate);
   speech.chooseVoice(settings.voice);
-  el.noCatalog.hidden = !!catalog;
-  el.startPanel.hidden = !catalog;
   const warn = [];
   if (!speech.canListen) warn.push('Spracherkennung ist in diesem Browser nicht verfügbar – der Autofahrt-Modus braucht Chrome (Android) oder Safari (iOS).');
   if (!speech.canSpeak) warn.push('Sprachausgabe ist nicht verfügbar.');
   el.voiceWarning.hidden = !warn.length;
   el.voiceWarning.textContent = warn.join(' ');
-  renderToday();
-  renderSettings();
+  await initAuth({ onSignedIn, onSignedOut });
 }
 
 renderVersion();
 bindTabs();
+bindAccount();
 bindLearn();
 bindSettings();
 init();
