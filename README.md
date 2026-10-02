@@ -6,6 +6,8 @@ liest die **richtige Antwort laut ELWIS** vor und sortiert die Frage nach dem **
 
 Die App läuft komplett im Browser (Handy), braucht keinen Server und funktioniert nach dem ersten Laden auch offline.
 
+**▶ App öffnen: <https://alxw1.github.io/lerncoach_sks/>** – auf dem Handy öffnen und „Zum Startbildschirm hinzufügen“.
+
 ## So läuft eine Runde
 
 1. **Frage** – „Navigation, Frage 12. …“
@@ -83,8 +85,8 @@ npm start            # http://localhost:8080
 npm test             # Unit-Tests (Leitner, Bewertung, Parser)
 ```
 
-Für das Handy die App per HTTPS bereitstellen (Mikrofon-Zugriff verlangt HTTPS), z. B. über **GitHub Pages**
-(*Settings → Pages → Branch: main, Ordner: / (root)*). Dann im Browser „Zum Startbildschirm hinzufügen“.
+Die App wird über **GitHub Pages** aus dem Branch `main` (Ordner `/`) veröffentlicht: <https://alxw1.github.io/lerncoach_sks/>.
+Jeder Merge nach `main` aktualisiert die Seite nach ein bis zwei Minuten. HTTPS ist nötig, weil der Browser sonst keinen Mikrofonzugriff erlaubt.
 
 Unterstützte Browser für den Autofahrt-Modus: **Chrome (Android)** und **Safari (iOS)** – beide bieten Spracherkennung auf Deutsch.
 
